@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { ShieldCheck, Phone, User, MapPin, AlertCircle, ArrowRight, Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { resetLocalStorage } from '../../repositories/localStorageRepository';
 import { GHANA_REGIONS, getCitiesByRegion } from '../../data/ghanaData';
 import { GhanaRegion } from '../../types';
 
 export const AuthScreen: React.FC = () => {
-  const { allUsers, switchUser, loginWithPhone, register } = useAuth();
+  const { allUsers, switchUser, loginWithPhone, register, storageError } = useAuth();
 
   const [mode, setMode] = useState<'demo' | 'phone' | 'register'>('demo');
   const [error, setError] = useState<string | null>(null);
@@ -21,6 +22,17 @@ export const AuthScreen: React.FC = () => {
   const [regRegion, setRegRegion] = useState<GhanaRegion>('Ashanti');
   const [regCity, setRegCity] = useState('Kumasi Central');
   const [regBio, setRegBio] = useState('');
+
+  const handleResetDemoData = () => {
+    const confirmed = window.confirm('This deletes all 8ATE demo data saved in this browser, but leaves unrelated site storage untouched. Continue?');
+    if (!confirmed) return;
+    try {
+      resetLocalStorage();
+      window.location.reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not reset local demo data.');
+    }
+  };
 
   const handleRegionChange = (newRegion: GhanaRegion) => {
     setRegRegion(newRegion);
@@ -86,15 +98,25 @@ export const AuthScreen: React.FC = () => {
             Made for Ghana
           </p>
           <p className="text-xs text-gray-500 mt-2 max-w-xs mx-auto leading-relaxed">
-            Anonymous Regional Walls, Private Chats, Ghana Hubs Marketplace & Community Feeds.
+            Regional Walls, Community Chats, Ghana Hubs Marketplace & Discover Feeds.
           </p>
         </div>
+
+        {storageError && (
+          <div role="alert" className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800">
+            <strong>Local data warning:</strong> {storageError}
+            <button type="button" onClick={handleResetDemoData} className="block mt-2 rounded-lg bg-red-700 px-3 py-2 text-[11px] font-bold text-white hover:bg-red-800">
+              Reset local demo data
+            </button>
+            <p className="mt-1 text-[10px]">This clears 8ATE's local demo data only. It cannot restore data already lost or corrupted.</p>
+          </div>
+        )}
 
         {/* Development Auth Disclaimer */}
         <div className="mb-5 p-2.5 rounded-xl bg-purple-50 border border-purple-200/60 flex items-start gap-2 text-xs text-purple-900">
           <ShieldCheck className="w-4 h-4 text-purple-700 shrink-0 mt-0.5" />
           <div className="text-[11px] leading-snug">
-            <span className="font-bold">Development Auth:</span> Zero-budget architecture using local persistent storage. Real SMS provider can be plugged in when deployed to production.
+            <span className="font-bold">Prototype sign-in:</span> Demo profiles and phone lookup use browser storage. No SMS/OTP verification or production authentication is connected. Do not enter a real phone number.
           </div>
         </div>
 
@@ -160,7 +182,7 @@ export const AuthScreen: React.FC = () => {
                     <div>
                       <div className="font-bold text-sm text-gray-900 flex items-center gap-1">
                         {u.displayName}
-                        {u.verified && <span className="text-[10px] text-purple-600">✓</span>}
+                        {u.verified && <span className="text-[9px] text-purple-600 font-semibold">Demo badge</span>}
                       </div>
                       <div className="text-xs text-gray-500 font-medium">
                         @{u.username} • {u.city}
@@ -196,7 +218,7 @@ export const AuthScreen: React.FC = () => {
                 />
               </div>
               <p className="text-[11px] text-gray-400 mt-1">
-                Demo phone numbers: <span className="text-purple-700 font-mono">+233 24 456 7890</span> (Kwame), <span className="text-purple-700 font-mono">+233 55 123 9988</span> (Ama)
+                Demo phone numbers only: <span className="text-purple-700 font-mono">+233 24 456 7890</span> (Kwame), <span className="text-purple-700 font-mono">+233 55 123 9988</span> (Ama). No verification code is sent.
               </p>
             </div>
 
@@ -205,7 +227,7 @@ export const AuthScreen: React.FC = () => {
               disabled={loading}
               className="w-full py-3 bg-purple-700 hover:bg-purple-800 text-white font-bold text-sm rounded-xl shadow-md shadow-purple-700/20 transition-all disabled:opacity-50"
             >
-              {loading ? 'Authenticating...' : 'Sign In with Phone'}
+              {loading ? 'Checking demo account...' : 'Sign In (Demo Lookup)'}
             </button>
           </form>
         )}
@@ -215,7 +237,7 @@ export const AuthScreen: React.FC = () => {
           <form onSubmit={handleRegister} className="space-y-3">
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-0.5">
-                Phone Number (Private)
+                Phone Number (Demo only — do not use a real number)
               </label>
               <input
                 type="text"
@@ -317,7 +339,7 @@ export const AuthScreen: React.FC = () => {
         {/* Privacy Promise Footer */}
         <div className="mt-6 pt-4 border-t border-gray-100 text-center">
           <p className="text-[11px] text-gray-400 leading-normal">
-            🔒 <span className="font-semibold text-gray-600">Privacy Guarantee:</span> Your phone number is strictly private and never visible on profiles, search, or regional walls.
+            <span className="font-semibold text-gray-600">Prototype privacy:</span> Phone numbers are omitted from public profiles, but stored in browser storage. This is not production-grade privacy.
           </p>
         </div>
       </div>

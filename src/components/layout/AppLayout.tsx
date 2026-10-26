@@ -111,7 +111,7 @@ export const AppLayout: React.FC = () => {
       {/* Top Header (only hidden when in full screen chat room on mobile) */}
       {!selectedConversationId && (
         <AppHeader
-          title={getHeaderTitle()}
+          activeTab={activeTab}
           onOpenSearch={() => setIsSearchModalOpen(true)}
           onOpenNotifications={() => setIsNotificationsModalOpen(true)}
           unreadNotificationsCount={unreadNotifsCount}

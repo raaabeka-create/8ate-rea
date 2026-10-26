@@ -106,6 +106,7 @@ export const CreateListingModal: React.FC<CreateListingModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-3.5 overflow-y-auto flex-1">
+          <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2">Prototype only: choose from sample images; uploading your own photos is not implemented.</p>
           {error && <div className="text-xs text-red-600 font-semibold">{error}</div>}
 
           {/* Category */}

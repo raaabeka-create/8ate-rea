@@ -5,6 +5,7 @@
 import { HubListing, HubCategory, GhanaRegion, UserProfile } from '../types';
 import { IHubRepository } from '../repositories/interfaces';
 import { LocalHubRepository } from '../repositories/localStorageRepository';
+import { isSecureHttpsUrl } from '../utils/secureUrl';
 
 export interface CreateListingParams {
   title: string;
@@ -43,9 +44,13 @@ export class HubService {
   }
 
   async createListing(params: CreateListingParams): Promise<HubListing> {
-    if (!params.title.trim()) throw new Error('Listing title is required.');
-    if (!params.description.trim()) throw new Error('Listing description is required.');
-    if (params.price < 0) throw new Error('Price must be a valid amount.');
+    if (!params.title.trim() || params.title.trim().length > 120) throw new Error('Listing title must contain 1–120 characters.');
+    if (!params.description.trim() || params.description.trim().length > 5000) throw new Error('Listing description must contain 1–5000 characters.');
+    if (!Number.isFinite(params.price) || params.price < 0) throw new Error('Price must be a valid non-negative amount.');
+    if (!params.seller?.id) throw new Error('A seller account is required.');
+    if (params.images.length > 5 || params.images.some((url) => !isSecureHttpsUrl(url))) {
+      throw new Error('Listings can use up to five secure HTTPS image URLs.');
+    }
 
     const defaultImg =
       params.images.length > 0

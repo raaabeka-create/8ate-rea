@@ -31,7 +31,10 @@ export const WallFeed: React.FC = () => {
       setWallPairs(pairs);
 
       const activePosts = await wallService.getActivePosts(
-        selectedPairId === 'ALL' ? undefined : selectedPairId
+        selectedPairId === 'ALL' ? undefined : selectedPairId,
+        undefined,
+        undefined,
+        user?.id
       );
       setPosts(activePosts);
     } catch (err) {
@@ -43,7 +46,7 @@ export const WallFeed: React.FC = () => {
 
   useEffect(() => {
     loadWallsData();
-  }, [selectedPairId]);
+  }, [selectedPairId, user?.id]);
 
   const handleVote = async (e: React.MouseEvent, post: PublicAnonymousWallPost, type: 'up' | 'down') => {
     e.stopPropagation();
@@ -76,13 +79,13 @@ export const WallFeed: React.FC = () => {
                 Ghana Anonymous Regional Walls
               </h2>
               <p className="text-[11px] text-purple-200">
-                Temporary cross-town conversations. Real owner strictly hidden.
+                Temporary cross-town conversations. Public posts use aliases; prototype storage is not secure.
               </p>
             </div>
           </div>
           <div className="hidden sm:flex items-center gap-1 text-[11px] font-semibold bg-white/10 px-2 py-1 rounded-lg">
             <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
-            <span>Encrypted Privacy</span>
+            <span>Demo anonymity only</span>
           </div>
         </div>
       </div>

@@ -33,10 +33,10 @@ export const WallPostDetailModal: React.FC<WallPostDetailModalProps> = ({
   const [submittingReply, setSubmittingReply] = useState(false);
 
   const fetchReplies = async () => {
-    if (!post) return;
+    if (!post || !user) return;
     try {
       setLoadingReplies(true);
-      const data = await wallService.getReplies(post.id);
+      const data = await wallService.getReplies(post.id, user.id);
       setReplies(data);
     } catch (err) {
       console.error('Failed to load replies', err);
@@ -49,7 +49,7 @@ export const WallPostDetailModal: React.FC<WallPostDetailModalProps> = ({
     if (post) {
       fetchReplies();
     }
-  }, [post?.id]);
+  }, [post?.id, user?.id]);
 
   if (!post || !user) return null;
 
@@ -89,7 +89,7 @@ export const WallPostDetailModal: React.FC<WallPostDetailModalProps> = ({
       setNewReplyText('');
       await fetchReplies();
       // Update parent post reply count
-      const updated = await wallService.getPostById(post.id);
+      const updated = await wallService.getPostById(post.id, user.id);
       if (updated) onPostUpdated(updated);
     } catch (err) {
       console.error('Failed to reply', err);

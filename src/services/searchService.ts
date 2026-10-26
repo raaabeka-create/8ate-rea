@@ -1,8 +1,8 @@
 /**
  * 8ATE - Cross-Application Search Service
  * 
- * Safely searches across Chats, Public Users, Regional Walls, Hubs, and Discover.
- * CRITICAL: Never exposes private phone numbers.
+ * Searches public profile fields and active content across Chats, Users, Walls, Hubs, and Discover.
+ * It deliberately does not read private phone-number fields.
  */
 
 import {
@@ -19,6 +19,13 @@ import {
   LocalHubRepository,
   LocalDiscoverRepository,
 } from '../repositories/localStorageRepository';
+import {
+  IAuthRepository,
+  IChatRepository,
+  IWallRepository,
+  IHubRepository,
+  IDiscoverRepository,
+} from '../repositories/interfaces';
 
 export interface SearchResults {
   users: UserProfile[];
@@ -29,11 +36,13 @@ export interface SearchResults {
 }
 
 export class SearchService {
-  private authRepo = new LocalAuthRepository();
-  private chatRepo = new LocalChatRepository();
-  private wallRepo = new LocalWallRepository();
-  private hubRepo = new LocalHubRepository();
-  private discoverRepo = new LocalDiscoverRepository();
+  constructor(
+    private readonly authRepo: IAuthRepository = new LocalAuthRepository(),
+    private readonly chatRepo: IChatRepository = new LocalChatRepository(),
+    private readonly wallRepo: IWallRepository = new LocalWallRepository(),
+    private readonly hubRepo: IHubRepository = new LocalHubRepository(),
+    private readonly discoverRepo: IDiscoverRepository = new LocalDiscoverRepository(),
+  ) {}
 
   async globalSearch(query: string, currentUserId: string): Promise<SearchResults> {
     const q = query.trim().toLowerCase();

@@ -6,8 +6,8 @@ import { UserProfile } from '../../types';
 interface NewChatModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectDirectUser: (user: UserProfile) => void;
-  onCreateGroup: (memberIds: string[], groupName: string) => void;
+  onSelectDirectUser: (user: UserProfile) => Promise<string | null>;
+  onCreateGroup: (memberIds: string[], groupName: string) => Promise<string | null>;
 }
 
 export const NewChatModal: React.FC<NewChatModalProps> = ({
@@ -16,17 +16,19 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
   onSelectDirectUser,
   onCreateGroup,
 }) => {
-  const { allUsers, user: currentUser } = useAuth();
+  const { allUsers, user: currentUser, privateInfo } = useAuth();
   const [mode, setMode] = useState<'direct' | 'group'>('direct');
   const [search, setSearch] = useState('');
   const [groupName, setGroupName] = useState('');
   const [selectedGroupMemberIds, setSelectedGroupMemberIds] = useState<string[]>([]);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   if (!isOpen || !currentUser) return null;
 
   const filteredUsers = allUsers.filter(
     (u) =>
       u.id !== currentUser.id &&
+      !privateInfo?.blockedUserIds.includes(u.id) &&
       (u.displayName.toLowerCase().includes(search.toLowerCase()) ||
         u.username.toLowerCase().includes(search.toLowerCase()) ||
         u.city.toLowerCase().includes(search.toLowerCase()))
@@ -40,11 +42,23 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
     }
   };
 
-  const handleCreateGroupSubmit = (e: React.FormEvent) => {
+  const handleCreateGroupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!groupName.trim() || selectedGroupMemberIds.length === 0) return;
-    onCreateGroup(selectedGroupMemberIds, groupName.trim());
-    onClose();
+    if (!groupName.trim() || selectedGroupMemberIds.length === 0) {
+      setModalError('Enter a group name and select at least one other member.');
+      return;
+    }
+    setModalError(null);
+    const error = await onCreateGroup(selectedGroupMemberIds, groupName.trim());
+    if (error) setModalError(error);
+    else onClose();
+  };
+
+  const handleSelectDirectUser = async (targetUser: UserProfile) => {
+    setModalError(null);
+    const error = await onSelectDirectUser(targetUser);
+    if (error) setModalError(error);
+    else onClose();
   };
 
   return (
@@ -89,9 +103,16 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
               type="text"
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
+              maxLength={80}
               placeholder="Enter Group Subject (e.g. KNUST Study Circle 🇬🇭)"
               className="w-full px-3 py-2 text-xs font-medium border border-gray-200 rounded-xl focus:outline-hidden focus:border-purple-600"
             />
+          </div>
+        )}
+
+        {modalError && (
+          <div role="alert" className="mx-3 mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">
+            {modalError}
           </div>
         )}
 
@@ -119,8 +140,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
                 key={u.id}
                 onClick={() => {
                   if (mode === 'direct') {
-                    onSelectDirectUser(u);
-                    onClose();
+                    void handleSelectDirectUser(u);
                   } else {
                     toggleMember(u.id);
                   }
@@ -141,7 +161,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({
                   <div>
                     <div className="font-bold text-xs text-gray-900 flex items-center gap-1">
                       {u.displayName}
-                      {u.verified && <span className="text-purple-600 text-[10px]">✓</span>}
+                      {u.verified && <span className="text-purple-600 text-[9px] font-semibold" title="Demo profile flag; not identity verified">Demo</span>}
                     </div>
                     <div className="text-[11px] text-gray-500">
                       @{u.username} • {u.city}

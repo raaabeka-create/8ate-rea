@@ -13,12 +13,12 @@ export class DiscoverService {
     this.discoverRepo = discoverRepo;
   }
 
-  async getPosts(category?: DiscoverCategory, searchQuery?: string): Promise<DiscoverPost[]> {
-    return this.discoverRepo.getPosts(category, searchQuery);
+  async getPosts(category?: DiscoverCategory, searchQuery?: string, userId?: string): Promise<DiscoverPost[]> {
+    return this.discoverRepo.getPosts(category, searchQuery, userId);
   }
 
-  async getPostById(postId: string): Promise<DiscoverPost | null> {
-    return this.discoverRepo.getPostById(postId);
+  async getPostById(postId: string, userId?: string): Promise<DiscoverPost | null> {
+    return this.discoverRepo.getPostById(postId, userId);
   }
 
   async createPost(

@@ -10,6 +10,8 @@
 import { UserProfile, PrivateAccountInfo, GhanaRegion } from '../types';
 import { IAuthRepository } from '../repositories/interfaces';
 import { LocalAuthRepository } from '../repositories/localStorageRepository';
+import { normalizeGhanaPhone } from '../utils/phone';
+import { isSecureHttpsUrl } from '../utils/secureUrl';
 
 export interface RegisterParams {
   phoneNumber: string; // e.g. "+233 24 123 4567"
@@ -46,8 +48,8 @@ export class AuthService {
    */
   async register(params: RegisterParams): Promise<{ user: UserProfile; privateInfo: PrivateAccountInfo }> {
     const cleanUsername = params.username.trim().toLowerCase().replace(/^@/, '');
-    if (!cleanUsername || cleanUsername.length < 3) {
-      throw new Error('Username must be at least 3 characters long.');
+    if (!cleanUsername || cleanUsername.length < 3 || cleanUsername.length > 24) {
+      throw new Error('Username must be between 3 and 24 characters long.');
     }
 
     if (!/^[a-z0-9_]+$/.test(cleanUsername)) {
@@ -60,12 +62,10 @@ export class AuthService {
       throw new Error(`Username @${cleanUsername} is already taken. Please choose another.`);
     }
 
-    const cleanPhone = params.phoneNumber.trim();
-    if (!cleanPhone || cleanPhone.length < 9) {
-      throw new Error('Please enter a valid Ghanaian phone number.');
-    }
+    const cleanPhone = normalizeGhanaPhone(params.phoneNumber);
 
-    const defaultAvatar = params.avatarUrl || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80`;
+    const defaultAvatar = params.avatarUrl?.trim() || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80`;
+    if (!isSecureHttpsUrl(defaultAvatar)) throw new Error('Avatar images must use a valid secure HTTPS URL.');
 
     const result = await this.authRepo.createUser(
       {

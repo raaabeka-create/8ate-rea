@@ -42,7 +42,9 @@ export const DiscoverFeed: React.FC<DiscoverFeedProps> = ({ onStartDirectChat })
     try {
       setLoading(true);
       const data = await discoverService.getPosts(
-        selectedCategory === 'ALL' ? undefined : selectedCategory
+        selectedCategory === 'ALL' ? undefined : selectedCategory,
+        undefined,
+        user?.id
       );
       setPosts(data);
     } catch (err) {
@@ -139,7 +141,7 @@ export const DiscoverFeed: React.FC<DiscoverFeedProps> = ({ onStartDirectChat })
                     <div className="flex items-center gap-1 font-bold text-xs text-gray-900">
                       <span>{post.author.displayName}</span>
                       {post.author.verified && (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-purple-600" />
+                        <span className="text-[9px] text-purple-600 font-semibold" title="Demo profile flag; not identity verified">Demo</span>
                       )}
                     </div>
                     <div className="text-[11px] text-gray-500 font-medium">

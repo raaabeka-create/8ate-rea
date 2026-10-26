@@ -2,7 +2,7 @@
  * 8ATE - Walls Service
  * 
  * Manages anonymous regional/community conversation spaces.
- * Strictly guarantees public anonymous payload isolation from private owner identity.
+ * Keeps owner IDs out of public post DTOs in the local prototype; browser storage is not secure.
  */
 
 import { WallPair, PublicAnonymousWallPost, WallReply, ExpirationDuration } from '../types';
@@ -24,12 +24,12 @@ export class WallService {
     return this.wallRepo.getWallPairById(pairId);
   }
 
-  async getActivePosts(wallPairId?: string, origin?: string, destination?: string): Promise<PublicAnonymousWallPost[]> {
-    return this.wallRepo.getActivePosts(wallPairId, origin, destination);
+  async getActivePosts(wallPairId?: string, origin?: string, destination?: string, userId?: string): Promise<PublicAnonymousWallPost[]> {
+    return this.wallRepo.getActivePosts(wallPairId, origin, destination, userId);
   }
 
-  async getPostById(postId: string): Promise<PublicAnonymousWallPost | null> {
-    return this.wallRepo.getPostById(postId);
+  async getPostById(postId: string, userId?: string): Promise<PublicAnonymousWallPost | null> {
+    return this.wallRepo.getPostById(postId, userId);
   }
 
   /**
@@ -62,8 +62,8 @@ export class WallService {
     return this.wallRepo.votePost(postId, voteType, userId);
   }
 
-  async getReplies(postId: string): Promise<WallReply[]> {
-    return this.wallRepo.getReplies(postId);
+  async getReplies(postId: string, userId?: string): Promise<WallReply[]> {
+    return this.wallRepo.getReplies(postId, userId);
   }
 
   async createReply(postId: string, content: string, ownerUserId: string): Promise<WallReply> {

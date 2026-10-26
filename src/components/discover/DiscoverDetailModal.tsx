@@ -66,8 +66,8 @@ export const DiscoverDetailModal: React.FC<DiscoverDetailModalProps> = ({
 
   const handleToggleBookmark = async () => {
     try {
-      const updated = await discoverService.toggleBookmark(post.id, user.id);
-      onPostUpdated(updated);
+      const isBookmarked = await discoverService.toggleBookmark(post.id, user.id);
+      onPostUpdated({ ...post, isBookmarked });
     } catch (err) {
       console.error('Bookmark failed', err);
     }
@@ -79,10 +79,10 @@ export const DiscoverDetailModal: React.FC<DiscoverDetailModalProps> = ({
 
     try {
       setSubmitting(true);
-      await discoverService.addComment(post.id, user, commentText.trim());
+      await discoverService.addComment(post.id, user.id, commentText.trim());
       setCommentText('');
       await fetchComments();
-      const updated = await discoverService.getPostById(post.id);
+      const updated = await discoverService.getPostById(post.id, user.id);
       if (updated) onPostUpdated(updated);
     } catch (err) {
       console.error('Failed to post comment', err);
@@ -107,7 +107,7 @@ export const DiscoverDetailModal: React.FC<DiscoverDetailModalProps> = ({
               <div className="flex items-center gap-1 font-bold text-xs text-gray-900">
                 <span>{post.author.displayName}</span>
                 {post.author.verified && (
-                  <span className="text-[10px] text-purple-600">✓</span>
+                  <span className="text-[9px] text-purple-600 font-semibold" title="Demo profile flag; not identity verified">Demo</span>
                 )}
               </div>
               <div className="text-[11px] text-purple-700 font-medium">
@@ -142,10 +142,10 @@ export const DiscoverDetailModal: React.FC<DiscoverDetailModalProps> = ({
           </p>
 
           {/* Photo Media */}
-          {post.mediaUrls && post.mediaUrls.length > 0 && (
+          {post.imageUrl && (
             <div className="rounded-xl overflow-hidden border border-gray-200">
               <img
-                src={post.mediaUrls[0]}
+                src={post.imageUrl}
                 alt="Post Media"
                 referrerPolicy="no-referrer"
                 className="w-full max-h-72 object-cover"

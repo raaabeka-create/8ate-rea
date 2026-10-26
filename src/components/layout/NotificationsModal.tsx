@@ -47,7 +47,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   };
 
   const handleItemClick = async (notif: AppNotification) => {
-    await notificationService.markAsRead(notif.id);
+    if (!user) return;
+    await notificationService.markAsRead(notif.id, user.id);
     onClose();
     if (notif.type === 'new_message') {
       onNavigateToTab('CHATS');
