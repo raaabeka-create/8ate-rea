@@ -383,7 +383,7 @@ describe('prototype repository guardrails', () => {
       sellerId: 'user_kwame',
       seller: canonical!,
       images: ['https://example.com/item.png'],
-    })).rejects.toThrow('Price must be a valid amount.');
+    })).rejects.toThrow('Listing title, description, and a valid non-negative price are required.');
   });
 
   it('keeps Discover likes scoped to each user', async () => {
