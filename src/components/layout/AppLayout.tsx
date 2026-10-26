@@ -17,7 +17,7 @@ import { chatService, notificationService } from '../../services';
 import { UserProfile, HubListing, PublicAnonymousWallPost, DiscoverPost } from '../../types';
 
 export const AppLayout: React.FC = () => {
-  const { user } = useAuth();
+  const { user, storageError } = useAuth();
   const [activeTab, setActiveTab] = useState<NavTab>('CHATS');
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [showPrototypeNotice, setShowPrototypeNotice] = useState(true);
@@ -126,6 +126,11 @@ export const AppLayout: React.FC = () => {
         <div className="flex items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[10px] text-amber-900">
           <span><strong>Prototype only:</strong> data is browser-local, not securely shared, and not end-to-end encrypted. Do not enter sensitive information.</span>
           <button type="button" onClick={() => setShowPrototypeNotice(false)} aria-label="Dismiss prototype notice" className="shrink-0 font-bold text-amber-900">Dismiss</button>
+        </div>
+      )}
+      {storageError && (
+        <div role="alert" className="border-b border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">
+          <strong>Local data warning:</strong> {storageError}
         </div>
       )}
       {globalActionError && (
