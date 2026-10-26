@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Pin, MessageSquarePlus, Users, Check } from 'lucide-react';
+import { Search, Pin, MessageSquarePlus, Users, Check, CheckCheck } from 'lucide-react';
 import { Conversation, UserProfile } from '../../types';
 import { chatService } from '../../services';
 import { useAuth } from '../../context/AuthContext';
@@ -214,10 +214,17 @@ export const ChatList: React.FC<ChatListProps> = ({
                   <div className="flex items-center justify-between gap-1">
                     <p className="text-xs text-gray-500 truncate flex items-center gap-1 font-normal">
                       {conv.lastMessage?.senderId === user?.id && (
-                        <Check
-                          className={`w-3.5 h-3.5 shrink-0 inline ${conv.lastMessage?.status === 'read' ? 'text-sky-500' : 'text-gray-400'}`}
-                          aria-label="Local demo receipt only; not proof of network delivery"
-                        />
+                        {conv.lastMessage?.status === 'read' ? (
+                          <CheckCheck
+                            className="w-3.5 h-3.5 text-sky-500 shrink-0 inline"
+                            aria-label="Local demo read receipt only; not proof of network delivery"
+                          />
+                        ) : (
+                          <Check
+                            className="w-3.5 h-3.5 text-gray-400 shrink-0 inline"
+                            aria-label="Local demo sent state only; not proof of network delivery"
+                          />
+                        )}
                       )}
                       <span>
                         {conv.lastMessage

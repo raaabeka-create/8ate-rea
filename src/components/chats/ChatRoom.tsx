@@ -9,6 +9,7 @@ import {
   MicOff,
   Send,
   Check,
+  CheckCheck,
   Pencil,
   X,
   Smile,
@@ -380,10 +381,17 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
                   )}
                   {isMine && !msg.deletedForEveryone && (
                     <>
-                      <Check
-                        className={`w-3.5 h-3.5 ${allRecipientsRead ? 'text-sky-300' : 'text-purple-200'}`}
-                        aria-label="Local demo read receipt only; not proof of network delivery"
-                      />
+                      {allRecipientsRead ? (
+                        <CheckCheck
+                          className="w-3.5 h-3.5 text-sky-300"
+                          aria-label="Local demo read receipt only; not proof of network delivery"
+                        />
+                      ) : (
+                        <Check
+                          className="w-3.5 h-3.5 text-purple-200"
+                          aria-label="Local demo sent state only; not proof of network delivery"
+                        />
+                      )}
                       {conversation?.isGroup && readCount > 0 && (
                         <span aria-label="Local demo group read receipts">Read {readCount}/{recipientIds.length}</span>
                       )}
