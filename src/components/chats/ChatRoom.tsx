@@ -52,9 +52,11 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
       setChatError(null);
       const conv = await chatService.getConversationById(conversationId, user.id);
       setConversation(conv);
+      // Record the local demo receipt before reading messages back so the UI
+      // reflects the updated receipt state on the first render.
+      await chatService.markAsRead(conversationId, user.id);
       const msgs = await chatService.getMessages(conversationId, user.id);
       setMessages(msgs);
-      await chatService.markAsRead(conversationId, user.id);
     } catch (err) {
       console.error('Error loading chat room', err);
       setChatError('Unable to load this conversation. Check local storage and try again.');
