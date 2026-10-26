@@ -25,6 +25,7 @@ export const HubsFeed: React.FC<HubsFeedProps> = ({ onStartChatWithSeller }) => 
   const [selectedRegion, setSelectedRegion] = useState<GhanaRegion | 'ALL'>('ALL');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [feedError, setFeedError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [activeListing, setActiveListing] = useState<HubListing | null>(null);
 
@@ -45,6 +46,7 @@ export const HubsFeed: React.FC<HubsFeedProps> = ({ onStartChatWithSeller }) => 
   const loadListings = async () => {
     try {
       setLoading(true);
+      setFeedError(null);
       const data = await hubService.getListings({
         category: selectedCategory === 'ALL' ? undefined : selectedCategory,
         region: selectedRegion === 'ALL' ? undefined : selectedRegion,
@@ -58,6 +60,7 @@ export const HubsFeed: React.FC<HubsFeedProps> = ({ onStartChatWithSeller }) => 
       }
     } catch (err) {
       console.error('Failed to load Hub listings', err);
+      setFeedError(err instanceof Error ? err.message : 'Could not load Hub listings.');
     } finally {
       setLoading(false);
     }
@@ -79,11 +82,13 @@ export const HubsFeed: React.FC<HubsFeedProps> = ({ onStartChatWithSeller }) => 
       });
     } catch (err) {
       console.error('Save toggle failed', err);
+      setFeedError(err instanceof Error ? err.message : 'Your saved-listing change could not be stored.');
     }
   };
 
   return (
     <div className="flex flex-col h-full bg-[#FAF9FC] pb-24 relative">
+      {feedError && <div role="alert" className="mx-3 mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">{feedError}</div>}
       {/* Top Search & Filter Bar */}
       <div className="p-3 bg-white border-b border-purple-100 sticky top-14 z-10 space-y-2.5 shadow-2xs">
         <div className="max-w-4xl mx-auto flex items-center gap-2">
