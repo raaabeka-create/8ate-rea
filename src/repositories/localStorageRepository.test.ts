@@ -8,7 +8,6 @@ import {
   LocalHubRepository,
   LocalNotificationRepository,
   LocalWallRepository,
-  LocalHubRepository,
   LocalCallRepository,
   LocalSafetyRepository,
 } from './localStorageRepository';

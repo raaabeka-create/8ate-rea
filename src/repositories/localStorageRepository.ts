@@ -1455,7 +1455,6 @@ export class LocalSafetyRepository implements ISafetyRepository {
     const details = report.details?.trim();
     const allowedTargetTypes: ReportRequest['targetType'][] = ['user', 'message', 'wall_post', 'wall_reply', 'hub_listing', 'discover_post'];
     const allowedReasons = ['Spam', 'Harassment', 'Scam', 'Hate/abuse', 'Sexual content', 'Violence', 'Illegal activity', 'Other'];
-    const allowedTargetTypes = ['user', 'message', 'wall_post', 'wall_reply', 'hub_listing', 'discover_post'];
     if (!allowedTargetTypes.includes(report.targetType)) throw new Error('Select a valid report target type.');
     if (!targetId || targetId.length > 200) throw new Error('A valid report target is required.');
     if (!targetSummary || targetSummary.length > 240) throw new Error('Report summary must contain 1–240 characters.');
