@@ -3,6 +3,7 @@ import { Search, X, MessageSquare, Flame, Store, Compass, User, ArrowRight } fro
 import { searchService, SearchResults } from '../../services';
 import { useAuth } from '../../context/AuthContext';
 import { UserProfile, HubListing, PublicAnonymousWallPost, DiscoverPost } from '../../types';
+import { subscribeToBlocklistChanges } from '../../utils/safetyEvents';
 
 interface GlobalSearchModalProps {
   isOpen: boolean;
@@ -47,7 +48,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       return;
     }
 
-    const timer = setTimeout(async () => {
+    const runSearch = async () => {
       setIsSearching(true);
       try {
         const data = await searchService.globalSearch(query, user.id);
@@ -57,9 +58,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       } finally {
         setIsSearching(false);
       }
-    }, 250);
+    };
 
-    return () => clearTimeout(timer);
+    const timer = setTimeout(() => { void runSearch(); }, 250);
+    const unsubscribe = subscribeToBlocklistChanges(() => { void runSearch(); });
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
   }, [query, user]);
 
   if (!isOpen) return null;

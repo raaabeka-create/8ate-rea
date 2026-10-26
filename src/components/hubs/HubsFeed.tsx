@@ -12,6 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import { GHANA_REGIONS } from '../../data/ghanaData';
 import { CreateListingModal } from './CreateListingModal';
 import { ListingDetailModal } from './ListingDetailModal';
+import { subscribeToBlocklistChanges } from '../../utils/safetyEvents';
 
 interface HubsFeedProps {
   onStartChatWithSeller: (seller: UserProfile, listingTitle: string) => void;
@@ -69,6 +70,7 @@ export const HubsFeed: React.FC<HubsFeedProps> = ({ onStartChatWithSeller }) => 
 
   useEffect(() => {
     loadListings();
+    return subscribeToBlocklistChanges(() => { void loadListings(); });
   }, [selectedCategory, selectedRegion, search, user]);
 
   const handleToggleSave = async (listingId: string) => {
