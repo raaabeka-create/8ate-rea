@@ -15,6 +15,7 @@ import { UserProfileScreen } from '../you/UserProfileScreen';
 import { useAuth } from '../../context/AuthContext';
 import { chatService, notificationService } from '../../services';
 import { UserProfile, HubListing, PublicAnonymousWallPost, DiscoverPost } from '../../types';
+import { resetLocalStorage } from '../../repositories/localStorageRepository';
 
 export const AppLayout: React.FC = () => {
   const { user, storageError } = useAuth();
@@ -50,6 +51,17 @@ export const AppLayout: React.FC = () => {
     const interval = setInterval(refreshUnreadCounters, 5000);
     return () => clearInterval(interval);
   }, [user]);
+
+  const handleResetLocalData = () => {
+    const confirmed = window.confirm('This deletes all 8ATE demo data saved in this browser. It cannot be recovered. Continue?');
+    if (!confirmed) return;
+    try {
+      resetLocalStorage();
+      window.location.reload();
+    } catch (err) {
+      setGlobalActionError(err instanceof Error ? err.message : 'Could not reset local demo data.');
+    }
+  };
 
   const handleTabChange = (tab: NavTab) => {
     setActiveTab(tab);
@@ -129,8 +141,9 @@ export const AppLayout: React.FC = () => {
         </div>
       )}
       {storageError && (
-        <div role="alert" className="border-b border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">
-          <strong>Local data warning:</strong> {storageError}
+        <div role="alert" className="flex items-center justify-between gap-2 border-b border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">
+          <span><strong>Local data warning:</strong> {storageError}</span>
+          <button type="button" onClick={handleResetLocalData} className="shrink-0 rounded-md bg-red-700 px-2 py-1 font-bold text-white">Reset local data</button>
         </div>
       )}
       {globalActionError && (
