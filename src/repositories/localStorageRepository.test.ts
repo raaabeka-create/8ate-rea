@@ -7,6 +7,7 @@ import {
   LocalDiscoverRepository,
   LocalNotificationRepository,
   LocalWallRepository,
+  LocalHubRepository,
   LocalCallRepository,
   LocalSafetyRepository,
 } from './localStorageRepository';
@@ -343,6 +344,46 @@ describe('prototype repository guardrails', () => {
 
     await signInAs('user_ama');
     expect(await calls.getCallRecords('user_ama')).toHaveLength(0);
+  });
+
+  it('uses the canonical seller profile and rejects invalid listing prices', async () => {
+    await signInAs('user_kwame');
+    const hubs = new LocalHubRepository();
+    const canonical = await new LocalAuthRepository().getUserProfile('user_kwame');
+    expect(canonical).toBeDefined();
+
+    const listing = await hubs.createListing({
+      title: 'A test listing',
+      description: 'A fictional test item',
+      price: 100,
+      region: 'Ashanti',
+      city: 'Kumasi',
+      category: 'Marketplace',
+      sellerId: 'user_kwame',
+      seller: {
+        id: 'user_kwame',
+        username: 'spoofed_username',
+        displayName: 'Spoofed Seller',
+        avatarUrl: 'https://example.com/spoof.png',
+        region: 'Ashanti',
+        city: 'Kumasi',
+      },
+      images: ['https://example.com/item.png'],
+    });
+
+    expect(listing.seller.username).toBe(canonical!.username);
+    expect(listing.seller.displayName).toBe(canonical!.displayName);
+    await expect(hubs.createListing({
+      title: 'Invalid price',
+      description: 'Should be rejected',
+      price: Number.POSITIVE_INFINITY,
+      region: 'Ashanti',
+      city: 'Kumasi',
+      category: 'Marketplace',
+      sellerId: 'user_kwame',
+      seller: canonical!,
+      images: ['https://example.com/item.png'],
+    })).rejects.toThrow('Price must be a valid amount.');
   });
 
   it('keeps Discover likes scoped to each user', async () => {
