@@ -11,9 +11,10 @@ import { AuthScreen } from './components/auth/AuthScreen';
 import { AppLayout } from './components/layout/AppLayout';
 
 const MainApp: React.FC = () => {
-  const { user, loading } = useAuth();
+  // AuthContext exposes this state as "isLoading".
+  const { user, isLoading } = useAuth();
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-purple-50 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
