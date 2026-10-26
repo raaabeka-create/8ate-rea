@@ -15,6 +15,8 @@ The chat, media, voice-note, and call screens include demonstration behavior. In
 - The call UI does not currently establish a WebRTC media connection.
 - Images shown in the chat attachment menu are sample URLs, not uploaded private attachments.
 - Anonymous Wall owner data stored in browser storage is not secure moderation storage.
+- Reports are saved only in local browser storage; no moderation team or service receives them. Blocking is enforced only by the local demo repository.
+- Seeded verification badges are demo flags, not proof of real-world identity verification.
 
 Do not use the prototype to store sensitive information or represent these demo behaviors as production security guarantees.
 
