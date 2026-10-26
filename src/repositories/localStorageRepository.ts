@@ -95,8 +95,9 @@ function getStorage<T>(key: string, defaultValue: T): T {
 }
 
 function assertCurrentUser(userId: string, action: string): void {
+  const sessionMarker = getStorage<string | null>(STORAGE_KEYS.SESSION_MARKER, null);
   const currentUserId = getStorage<string | null>(STORAGE_KEYS.CURRENT_USER_ID, null);
-  if (!currentUserId || currentUserId !== userId) {
+  if (sessionMarker !== 'explicit' || !currentUserId || currentUserId !== userId) {
     throw new Error(`Only the signed-in demo user can ${action}.`);
   }
 }
@@ -242,8 +243,10 @@ export class LocalAuthRepository implements IAuthRepository {
     if (userId) {
       const users = getStorage<UserProfile[]>(STORAGE_KEYS.USERS, SEED_USERS);
       if (!users.some((user) => user.id === userId)) throw new Error('Cannot sign in as an unknown user.');
-      setStorage(STORAGE_KEYS.CURRENT_USER_ID, userId);
-      setStorage(STORAGE_KEYS.SESSION_MARKER, 'explicit');
+      setStorageBatch([
+        [STORAGE_KEYS.CURRENT_USER_ID, userId],
+        [STORAGE_KEYS.SESSION_MARKER, 'explicit'],
+      ]);
       return;
     }
     // Removing keys succeeds even when storage is full; logout should not need extra quota.

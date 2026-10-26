@@ -154,6 +154,14 @@ describe('prototype repository guardrails', () => {
     await expect(authRepo.setCurrentUserId('missing_user')).rejects.toThrow('Cannot sign in as an unknown user.');
   });
 
+  it('rejects a raw stored user ID without the explicit demo-session marker', async () => {
+    localStorage.setItem('8ATE_CURRENT_USER_ID', 'user_kwame');
+    const chats = new LocalChatRepository();
+    await expect(chats.getConversations('user_kwame'))
+      .rejects.toThrow('Only the signed-in demo user can read conversations.');
+    expect(new LocalAuthRepository().getCurrentUserId()).toBeNull();
+  });
+
   it('prevents non-members from reading or sending messages in a conversation', async () => {
     const chats = new LocalChatRepository();
 
