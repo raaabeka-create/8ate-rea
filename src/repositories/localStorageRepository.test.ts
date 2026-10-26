@@ -13,6 +13,7 @@ import {
 } from './localStorageRepository';
 import { normalizeGhanaPhone } from '../utils/phone';
 import { SearchService } from '../services/searchService';
+import { ChatService } from '../services/chatService';
 
 class MemoryStorage implements Storage {
   private values = new Map<string, string>();
@@ -803,6 +804,32 @@ describe('prototype repository guardrails', () => {
     const afterKofi = (await chats.getMessages(group.id, 'user_kofi')).find((message) => message.id === groupMessage.id);
     expect(afterKofi?.readByUserIds).toEqual(expect.arrayContaining(['user_kwame', 'user_ama', 'user_kofi']));
     expect(afterKofi?.status).toBe('read');
+  });
+
+  it('creates recipient-only local notifications after a message is saved', async () => {
+    const chatService = new ChatService(new LocalChatRepository(), new LocalNotificationRepository());
+    const notifications = new LocalNotificationRepository();
+    const sender = await auth.getUserProfile('user_kwame');
+
+    await signInAs('user_kwame');
+    await chatService.sendTextMessage(
+      'conv_kwame_ama',
+      'user_kwame',
+      'unique-notification-preview-8ate'
+    );
+
+    await signInAs('user_ama');
+    const amaNotifications = await notifications.getNotifications('user_ama');
+    expect(amaNotifications.some((item) =>
+      item.type === 'new_message' &&
+      item.title === `${sender?.displayName} sent you a message` &&
+      item.body === 'unique-notification-preview-8ate' &&
+      item.senderAvatar === sender?.avatarUrl
+    )).toBe(true);
+
+    await signInAs('user_kwame');
+    const kwameNotifications = await notifications.getNotifications('user_kwame');
+    expect(kwameNotifications.some((item) => item.body === 'unique-notification-preview-8ate')).toBe(false);
   });
 
 });
