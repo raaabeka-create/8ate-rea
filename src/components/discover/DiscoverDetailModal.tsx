@@ -33,15 +33,18 @@ export const DiscoverDetailModal: React.FC<DiscoverDetailModalProps> = ({
   const [commentText, setCommentText] = useState('');
   const [loadingComments, setLoadingComments] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const fetchComments = async () => {
     if (!post) return;
     try {
       setLoadingComments(true);
+      setDetailError(null);
       const data = await discoverService.getComments(post.id);
       setComments(data);
     } catch (err) {
       console.error('Error fetching comments', err);
+      setDetailError(err instanceof Error ? err.message : 'Could not load comments.');
     } finally {
       setLoadingComments(false);
     }
@@ -61,6 +64,7 @@ export const DiscoverDetailModal: React.FC<DiscoverDetailModalProps> = ({
       onPostUpdated(updated);
     } catch (err) {
       console.error('Like failed', err);
+      setDetailError(err instanceof Error ? err.message : 'Your like could not be saved.');
     }
   };
 
@@ -70,6 +74,7 @@ export const DiscoverDetailModal: React.FC<DiscoverDetailModalProps> = ({
       onPostUpdated({ ...post, isBookmarked });
     } catch (err) {
       console.error('Bookmark failed', err);
+      setDetailError(err instanceof Error ? err.message : 'Your bookmark could not be saved.');
     }
   };
 
@@ -79,6 +84,7 @@ export const DiscoverDetailModal: React.FC<DiscoverDetailModalProps> = ({
 
     try {
       setSubmitting(true);
+      setDetailError(null);
       await discoverService.addComment(post.id, user.id, commentText.trim());
       setCommentText('');
       await fetchComments();
@@ -86,6 +92,7 @@ export const DiscoverDetailModal: React.FC<DiscoverDetailModalProps> = ({
       if (updated) onPostUpdated(updated);
     } catch (err) {
       console.error('Failed to post comment', err);
+      setDetailError(err instanceof Error ? err.message : 'Your comment could not be saved.');
     } finally {
       setSubmitting(false);
     }
@@ -128,6 +135,8 @@ export const DiscoverDetailModal: React.FC<DiscoverDetailModalProps> = ({
             </button>
           </div>
         </div>
+
+        {detailError && <div role="alert" className="mx-3 mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">{detailError}</div>}
 
         {/* Scrollable Post & Comments */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
