@@ -224,7 +224,7 @@ export const ChatList: React.FC<ChatListProps> = ({
                             className="w-3.5 h-3.5 text-gray-400 shrink-0 inline"
                             aria-label="Local demo sent state only; not proof of network delivery"
                           />
-                        )}
+                        )
                       )}
                       <span>
                         {conv.lastMessage
