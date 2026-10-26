@@ -7,7 +7,7 @@ import { safetyService } from '../../services';
 
 export const ReportModal: React.FC = () => {
   const { reportTarget, closeReport, submitReport } = useReport();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
 
   const [reason, setReason] = useState<ReportReason>('Spam');
   const [details, setDetails] = useState('');
@@ -69,6 +69,7 @@ export const ReportModal: React.FC = () => {
     setBlocking(true);
     try {
       await safetyService.blockUser(user.id, reportTarget.id);
+      await refreshUser();
       setBlocked(true);
     } catch (err) {
       console.error('Block user failed', err);
