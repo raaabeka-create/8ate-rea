@@ -1,0 +1,6 @@
+{
+  "name": "8ATE",
+  "description": "Ghana's Social & Community App - Regional walls, private chats, marketplace hubs, calls, and discover feeds.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
