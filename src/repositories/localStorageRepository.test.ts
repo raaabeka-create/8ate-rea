@@ -159,6 +159,21 @@ describe('prototype repository guardrails', () => {
     const chats = new LocalChatRepository();
     await expect(chats.getConversations('user_kwame'))
       .rejects.toThrow('Only the signed-in demo user can read conversations.');
+    await expect(chats.createConversation(['user_kwame', 'user_ama']))
+      .rejects.toThrow('The signed-in user must be a conversation member.');
+
+    const otherUser = await new LocalAuthRepository().getUserProfile('user_ama');
+    if (!otherUser) throw new Error('Expected seeded user_ama profile in test setup.');
+    const calls = new LocalCallRepository();
+    await expect(calls.addCallRecord({
+      ownerUserId: 'user_kwame',
+      otherUser,
+      type: 'voice',
+      direction: 'outgoing',
+      status: 'completed',
+      startedAt: Date.now(),
+      durationSeconds: 30,
+    })).rejects.toThrow('Call history can only be written for the signed-in user.');
     expect(new LocalAuthRepository().getCurrentUserId()).toBeNull();
   });
 

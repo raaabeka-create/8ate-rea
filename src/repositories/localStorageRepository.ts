@@ -504,8 +504,11 @@ export class LocalChatRepository implements IChatRepository {
     const convs = getStorage<Conversation[]>(STORAGE_KEYS.CONVERSATIONS, SEED_CONVERSATIONS);
     const users = getStorage<UserProfile[]>(STORAGE_KEYS.USERS, SEED_USERS);
     participantIds = Array.from(new Set(participantIds.map((id) => id.trim()).filter(Boolean)));
+    const sessionMarker = getStorage<string | null>(STORAGE_KEYS.SESSION_MARKER, null);
     const currentUserId = getStorage<string | null>(STORAGE_KEYS.CURRENT_USER_ID, null);
-    if (!currentUserId || !participantIds.includes(currentUserId)) throw new Error('The signed-in user must be a conversation member.');
+    if (sessionMarker !== 'explicit' || !currentUserId || !participantIds.includes(currentUserId)) {
+      throw new Error('The signed-in user must be a conversation member.');
+    }
     if (participantIds.length < 2) throw new Error('A conversation requires at least two distinct members.');
     if (participantIds.length > 100) throw new Error('A conversation cannot have more than 100 members.');
     if (!isGroup && participantIds.length !== 2) throw new Error('A direct conversation must have exactly two members.');
@@ -1443,8 +1446,9 @@ export class LocalCallRepository implements ICallRepository {
   }
 
   async addCallRecord(record: Omit<CallRecord, 'id'>): Promise<CallRecord> {
+    const sessionMarker = getStorage<string | null>(STORAGE_KEYS.SESSION_MARKER, null);
     const currentUserId = getStorage<string | null>(STORAGE_KEYS.CURRENT_USER_ID, null);
-    if (!currentUserId || record.ownerUserId !== currentUserId) {
+    if (sessionMarker !== 'explicit' || !currentUserId || record.ownerUserId !== currentUserId) {
       throw new Error('Call history can only be written for the signed-in user.');
     }
     const users = getStorage<UserProfile[]>(STORAGE_KEYS.USERS, SEED_USERS);
