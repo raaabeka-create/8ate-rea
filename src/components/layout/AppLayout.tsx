@@ -20,6 +20,8 @@ export const AppLayout: React.FC = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<NavTab>('CHATS');
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [showPrototypeNotice, setShowPrototypeNotice] = useState(true);
+  const [globalActionError, setGlobalActionError] = useState<string | null>(null);
 
   // Unread counts
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
@@ -72,6 +74,7 @@ export const AppLayout: React.FC = () => {
       refreshUnreadCounters();
     } catch (err) {
       console.error('Error starting seller chat', err);
+      setGlobalActionError(err instanceof Error ? err.message : 'Could not start a conversation with this seller.');
     }
   };
 
@@ -84,6 +87,7 @@ export const AppLayout: React.FC = () => {
       refreshUnreadCounters();
     } catch (err) {
       console.error('Error starting direct chat', err);
+      setGlobalActionError(err instanceof Error ? err.message : 'Could not start this conversation.');
     }
   };
 
@@ -116,6 +120,19 @@ export const AppLayout: React.FC = () => {
           onOpenNotifications={() => setIsNotificationsModalOpen(true)}
           unreadNotificationsCount={unreadNotifsCount}
         />
+      )}
+
+      {!selectedConversationId && showPrototypeNotice && (
+        <div className="flex items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[10px] text-amber-900">
+          <span><strong>Prototype only:</strong> data is browser-local, not securely shared, and not end-to-end encrypted. Do not enter sensitive information.</span>
+          <button type="button" onClick={() => setShowPrototypeNotice(false)} aria-label="Dismiss prototype notice" className="shrink-0 font-bold text-amber-900">Dismiss</button>
+        </div>
+      )}
+      {globalActionError && (
+        <div role="alert" className="flex items-center justify-between gap-2 border-b border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">
+          <span>{globalActionError}</span>
+          <button type="button" onClick={() => setGlobalActionError(null)} aria-label="Dismiss error" className="shrink-0 font-bold">Dismiss</button>
+        </div>
       )}
 
       {/* Main Content Area */}
