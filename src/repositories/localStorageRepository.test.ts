@@ -155,7 +155,7 @@ describe('prototype repository guardrails', () => {
   });
 
   it('rejects a raw stored user ID without the explicit demo-session marker', async () => {
-    localStorage.setItem('8ATE_CURRENT_USER_ID', 'user_kwame');
+    localStorage.setItem('8ATE_CURRENT_USER_ID', JSON.stringify('user_kwame'));
     const chats = new LocalChatRepository();
     await expect(chats.getConversations('user_kwame'))
       .rejects.toThrow('Only the signed-in demo user can read conversations.');
