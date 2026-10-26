@@ -80,6 +80,26 @@ describe('prototype repository guardrails', () => {
       .rejects.toThrow('Stored 8ATE data for 8ATE_USERS_V1 is corrupted.');
   });
 
+  it('rejects valid JSON with an invalid collection shape instead of silently restoring demo data', async () => {
+    const brokenStorage = new MemoryStorage();
+    brokenStorage.setItem('8ATE_USERS_V1', JSON.stringify({ unexpected: true }));
+    vi.stubGlobal('localStorage', brokenStorage);
+
+    await expect(new LocalAuthRepository().getAllUsers())
+      .rejects.toThrow('Stored 8ATE data for 8ATE_USERS_V1 has an unexpected shape.');
+    expect(brokenStorage.getItem('8ATE_USERS_V1')).toBe(JSON.stringify({ unexpected: true }));
+  });
+
+  it('rejects JSON null and empty-string corruption for collection keys', async () => {
+    const brokenStorage = new MemoryStorage();
+    vi.stubGlobal('localStorage', brokenStorage);
+    brokenStorage.setItem('8ATE_USERS_V1', 'null');
+    await expect(new LocalAuthRepository().getAllUsers()).rejects.toThrow('has an unexpected shape');
+    brokenStorage.setItem('8ATE_USERS_V1', '');
+    await expect(new LocalAuthRepository().getAllUsers()).rejects.toThrow('is corrupted');
+    expect(brokenStorage.getItem('8ATE_USERS_V1')).toBe('');
+  });
+
   it('surfaces browser storage write failures instead of pretending the session was saved', async () => {
     vi.stubGlobal('localStorage', {
       length: 0,

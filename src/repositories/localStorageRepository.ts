@@ -74,6 +74,50 @@ const STORAGE_KEYS = {
   USER_VOTES: '8ATE_USER_VOTES_V1',
 };
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isRecordArray(value: unknown): value is Record<string, unknown>[] {
+  return Array.isArray(value) && value.every(isPlainRecord);
+}
+
+/**
+ * Validate the persisted value's basic structure before casting it to a domain type.
+ * This detects common local corruption; it is not a substitute for server validation.
+ */
+function hasExpectedStorageShape(key: string, parsed: unknown, defaultValue: unknown): boolean {
+  if (parsed === null) return defaultValue === null;
+  if (defaultValue === null) return typeof parsed === 'string';
+  if (Array.isArray(defaultValue)) return isRecordArray(parsed);
+  if (typeof defaultValue === 'string') return typeof parsed === 'string';
+  if (typeof defaultValue === 'number') return typeof parsed === 'number' && Number.isFinite(parsed);
+  if (typeof defaultValue === 'boolean') return typeof parsed === 'boolean';
+
+  if (isPlainRecord(defaultValue)) {
+    if (!isPlainRecord(parsed)) return false;
+    const defaultValues = Object.values(defaultValue);
+    if (defaultValues.length > 0 && defaultValues.every(Array.isArray)) {
+      return Object.values(parsed).every(isRecordArray);
+    }
+    if (defaultValues.length > 0 && defaultValues.every(isPlainRecord)) {
+      return Object.values(parsed).every(isPlainRecord);
+    }
+    if (key === STORAGE_KEYS.PRIVATE_ACCOUNTS || key === STORAGE_KEYS.WALL_MODERATION) {
+      return Object.values(parsed).every(isPlainRecord);
+    }
+    if (key === STORAGE_KEYS.MESSAGES || key === STORAGE_KEYS.WALL_REPLIES || key === STORAGE_KEYS.DISCOVER_COMMENTS) {
+      return Object.values(parsed).every(isRecordArray);
+    }
+    if (key === STORAGE_KEYS.USER_VOTES) {
+      return Object.values(parsed).every((value) => value === 'up' || value === 'down');
+    }
+    return true;
+  }
+
+  return typeof parsed === typeof defaultValue;
+}
+
 function getStorage<T>(key: string, defaultValue: T): T {
   const cloneDefault = (): T => JSON.parse(JSON.stringify(defaultValue)) as T;
   let raw: string | null;
@@ -83,15 +127,21 @@ function getStorage<T>(key: string, defaultValue: T): T {
     console.error(`Error reading ${key} from browser storage`, error);
     throw new Error('8ATE could not read browser storage. Storage may be unavailable.');
   }
-  if (!raw) return cloneDefault();
+  if (raw === null) return cloneDefault();
+
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(raw);
-    // A literal JSON null is not a valid value for most collection keys.
-    return parsed === null ? cloneDefault() : parsed as T;
+    parsed = JSON.parse(raw);
   } catch (error) {
     console.error(`Stored data for ${key} is unreadable; refusing to replace it with demo defaults.`, error);
     throw new Error(`Stored 8ATE data for ${key} is corrupted. No replacement data was written.`);
   }
+
+  if (!hasExpectedStorageShape(key, parsed, defaultValue)) {
+    console.error(`Stored data for ${key} has an unexpected shape; refusing to replace it with demo defaults.`);
+    throw new Error(`Stored 8ATE data for ${key} has an unexpected shape. No replacement data was written.`);
+  }
+  return parsed as T;
 }
 
 function assertCurrentUser(userId: string, action: string): void {
@@ -199,7 +249,7 @@ export function initializeLocalStorage(): void {
     [STORAGE_KEYS.CALL_RECORDS, SEED_CALL_RECORDS],
     [STORAGE_KEYS.NOTIFICATIONS, SEED_NOTIFICATIONS],
   ];
-  const missing = defaults.filter(([key]) => !localStorage.getItem(key));
+  const missing = defaults.filter(([key]) => localStorage.getItem(key) === null);
   if (missing.length) setStorageBatch(missing);
 }
 
