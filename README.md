@@ -1,60 +1,77 @@
 # 8ATE Ghana
 
-8ATE is a React + TypeScript + Vite prototype for Ghana-focused community conversations, regional Walls, Ghana Hubs, Discover, profiles, notifications, reporting, blocking, and call UI.
+8ATE is a React + TypeScript prototype for a Ghana-focused social and community app. The current interface includes Chats, anonymous Regional Walls, Ghana Hubs listings, Discover posts, profiles, notifications, reports/blocking, and fictional demo accounts.
 
-## Current implementation status
+> **Prototype warning:** This repository is not production-ready. Data is stored in the browser and can be inspected or modified by anyone with access to that browser profile. Do not enter real phone numbers, passwords, private messages, or other sensitive information. There is no production OTP authentication, shared backend, end-to-end encryption, push notification service, real media upload, real voice-note recording/playback, or live voice/video calling.
 
-**This repository is a prototype, not a production messaging service.** Its default repositories store data in browser `localStorage`. Data is local to a browser profile, can be edited by the browser user, and is not shared reliably across devices or users. The current phone lookup and user switching are development simulations. The local repository now rejects several accidental cross-user actions (for example, reading another user's chat through the repository API, deleting another user's message, or clearing another user's call history), but these checks are not a security boundary because browser storage and client code are user-controlled.
+## Requirements
 
-The chat, media, voice-note, and call screens include demonstration behavior. In particular:
+- Node.js 20 or newer
+- npm
 
-- Messages are not protected by server-side authorization or row-level security.
-- The application does not implement end-to-end encryption.
-- Message checkmarks do not prove real delivery or reading by another device.
-- The voice-note UI does not currently capture and upload actual audio.
-- The call UI does not currently establish a WebRTC media connection.
-- Images shown in the chat attachment menu are sample URLs, not uploaded private attachments.
-- Anonymous Wall owner data stored in browser storage is not secure moderation storage.
-- Reports are saved only in local browser storage; no moderation team or service receives them. Blocking is enforced only by the local demo repository.
-- Seeded verification badges are demo flags, not proof of real-world identity verification.
-
-Do not use the prototype to store sensitive information or represent these demo behaviors as production security guarantees.
-
-## Development
-
-Requirements: Node.js 20+ and npm.
+## Run locally
 
 ```bash
 npm install
-npm run lint
-npm test
-npm audit --audit-level=high
-npm run build
 npm run dev
 ```
 
-The `lint` script runs TypeScript checking (`tsc --noEmit`), `test` runs repository guardrail tests with Vitest, and `build` produces the Vite production bundle.
+Vite starts on port `3000` and binds to `0.0.0.0`. Open the local URL shown in the terminal.
+
+## Validate changes
+
+Run the same core checks used by CI:
+
+```bash
+npm run lint
+npm test
+npm run build
+npm audit --audit-level=high
+```
+
+- `npm run lint` runs TypeScript's no-emit check.
+- `npm test` runs the Vitest repository guardrail tests.
+- `npm run build` creates the production bundle in `dist/`.
+- CI also prints a dependency audit summary and fails on high/critical vulnerabilities.
 
 ## Architecture
 
 - `src/components/`: React screens and UI.
-- `src/context/`: authentication, calls, and reporting state.
-- `src/services/`: feature-level business operations.
-- `src/repositories/interfaces.ts`: data access contracts.
-- `src/repositories/localStorageRepository.ts`: prototype-only browser persistence.
-- `src/types/index.ts`: shared domain models.
-- `src/data/seedData.ts`: fictional/demo seed content.
+- `src/context/`: authentication, calls, and report modal state.
+- `src/services/`: application-level service APIs.
+- `src/repositories/interfaces.ts`: repository contracts intended to separate UI/services from persistence.
+- `src/repositories/localStorageRepository.ts`: current browser-local prototype persistence and validation.
+- `src/repositories/localStorageRepository.test.ts`: regression tests for session isolation, validation, blocking, message editing/deletion, receipts, reports, and storage failures.
+- `src/types/index.ts`: shared domain types.
+- `src/data/seedData.ts`: fictional demo users and sample records.
 
-Feature services use repository interfaces, which provide a migration seam for a server-backed implementation. A production migration must introduce real authentication, server-enforced access policies, database migrations, realtime event handling, secure media storage, and regression tests. UI checks alone are not authorization. See [the Supabase migration plan](docs/supabase-migration-plan.md) for the proposed data model, RLS invariants, transactional RPCs, and acceptance tests.
+The repository interfaces are a useful migration seam, but they do **not** mean a remote backend is already connected. The current implementation uses browser `localStorage`; different users and devices do not share a durable source of truth.
 
-## Safe implementation order
+## Current behavior and explicit limits
 
-1. Establish Supabase project configuration, migrations, and row-level security before wiring production data.
-2. Implement authenticated profiles and membership-controlled conversations.
-3. Persist messages and per-recipient delivery/read receipts; subscribe to authorized realtime changes.
-4. Enforce message editing/deletion and reaction permissions on the server.
-5. Add private media storage and real voice recording/playback.
-6. Implement WebRTC signaling and connection lifecycle separately from call UI.
-7. Verify Walls anonymity/moderation, Hubs, Discover, blocking/reporting, and notifications with multi-user tests.
+| Area | Current prototype behavior | Not implemented |
+| --- | --- | --- |
+| Sign-in | Fictional demo accounts and local session marker | Verified phone ownership, OTP, secure production sessions |
+| Chats | Browser-local messages, sender edit window, delete tombstones, local per-recipient receipt simulation | Server persistence, cross-device sync, real network delivery/read receipts |
+| Media | Sample HTTPS image URLs | File picker/upload, private object storage, real audio blobs |
+| Calls | Simulated call screen and local call history | WebRTC signaling, live audio/video, call permissions and network handling |
+| Walls | Anonymous public DTOs with separate local moderation metadata | Server-side anonymity guarantees or protected moderation records |
+| Safety | Local blocking/reporting validation and blocked-content filtering | Server-enforced authorization, durable moderation workflow, abuse-rate limits |
+| Notifications | Local records and per-user read state | Push delivery and server-side event generation |
 
-Until those steps are complete, keep the app clearly marked as a prototype.
+The UI intentionally labels simulated receipts, media, calls, and verification. Do not remove those labels until the underlying behavior is real and tested.
+
+## Before production
+
+1. Connect a real authentication provider with verified phone ownership and session lifecycle controls.
+2. Add a shared database and enforce authorization on the server (for example, PostgreSQL row-level security); never rely on browser-side checks as the security boundary.
+3. Move private media to authenticated object storage with upload limits, MIME/type validation, and access policies.
+4. Implement realtime delivery and per-recipient receipts from authoritative server events.
+5. Implement real audio capture/playback and WebRTC calling, including permissions, signaling, reconnects, and failure handling.
+6. Add server-side abuse prevention, moderation tooling, audit logs, backups, retention/deletion policies, and privacy review.
+7. Add end-to-end encryption only with a reviewed protocol and correct key management; a UI label is not encryption.
+8. Test migrations, concurrency, multiple devices, and the existing Chats, Walls, Hubs, Discover, profile, report, and blocking flows before deployment.
+
+## Contribution rule
+
+Prefer small, reviewable changes. Preserve existing features, add regression tests for behavior changes, and require the CI type-check, test suite, dependency audit, and production build to pass before merging.
