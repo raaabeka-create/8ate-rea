@@ -43,6 +43,7 @@ export class ChatService {
           type: 'new_message',
           title: `${sender.displayName} sent you a message`,
           body,
+          targetUrl: `/chats/${encodeURIComponent(conversationId)}`,
           isRead: false,
           senderAvatar: sender.avatarUrl,
         })));

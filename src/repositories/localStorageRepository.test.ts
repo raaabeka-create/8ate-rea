@@ -824,6 +824,7 @@ describe('prototype repository guardrails', () => {
       item.type === 'new_message' &&
       item.title === `${sender?.displayName} sent you a message` &&
       item.body === 'unique-notification-preview-8ate' &&
+      item.targetUrl === '/chats/conv_kwame_ama' &&
       item.senderAvatar === sender?.avatarUrl
     )).toBe(true);
 

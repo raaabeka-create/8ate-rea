@@ -57,7 +57,7 @@ The repository interfaces are a useful migration seam, but they do **not** mean 
 | Calls | Simulated call screen and local call history | WebRTC signaling, live audio/video, call permissions and network handling |
 | Walls | Anonymous public DTOs with separate local moderation metadata | Server-side anonymity guarantees or protected moderation records |
 | Safety | Local blocking/reporting validation and blocked-content filtering | Server-enforced authorization, durable moderation workflow, abuse-rate limits |
-| Notifications | Local records and per-user read state | Push delivery and server-side event generation |
+| Notifications | Local message-send notifications and per-user read state | Push delivery and server-side event generation |
 
 The UI intentionally labels simulated receipts, media, calls, and verification. Do not remove those labels until the underlying behavior is real and tested.
 
