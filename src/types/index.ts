@@ -74,6 +74,9 @@ export interface ChatMessage {
   mediaUrl?: string;
   audioDurationSec?: number;
   timestamp: number;
+  editedAt?: number;
+  /** Local prototype receipt state; not proof of network delivery or read status. */
+  readByUserIds?: string[];
   status: MessageStatus;
   reactions: MessageReaction[];
   deletedForEveryone?: boolean;

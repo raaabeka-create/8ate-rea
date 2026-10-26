@@ -3,6 +3,7 @@ import { ShieldAlert, X, Check } from 'lucide-react';
 import { useReport } from '../../context/ReportContext';
 import { useAuth } from '../../context/AuthContext';
 import { ReportReason } from '../../types';
+import { notifyBlocklistChanged } from '../../utils/safetyEvents';
 import { safetyService } from '../../services';
 
 export const ReportModal: React.FC = () => {
@@ -69,6 +70,7 @@ export const ReportModal: React.FC = () => {
     setBlocking(true);
     try {
       await safetyService.blockUser(user.id, reportTarget.id);
+      notifyBlocklistChanged();
       await refreshUser();
       setBlocked(true);
     } catch (err) {

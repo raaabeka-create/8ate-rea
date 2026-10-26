@@ -56,18 +56,21 @@ export class SearchService {
       };
     }
 
-    const [allUsers, convs, activeWalls, hubListings, discoverPosts] = await Promise.all([
+    const [allUsers, convs, activeWalls, hubListings, discoverPosts, privateInfo] = await Promise.all([
       this.authRepo.getAllUsers(),
       this.chatRepo.getConversations(currentUserId),
-      this.wallRepo.getActivePosts(),
-      this.hubRepo.getListings(),
-      this.discoverRepo.getPosts(),
+      this.wallRepo.getActivePosts(undefined, undefined, undefined, currentUserId),
+      this.hubRepo.getListings({ userId: currentUserId }),
+      this.discoverRepo.getPosts(undefined, undefined, currentUserId),
+      this.authRepo.getPrivateAccountInfo(currentUserId),
     ]);
+    const blockedUserIds = new Set(privateInfo?.blockedUserIds ?? []);
 
     // Match users by @username or displayName (strictly exclude current user and NO phone numbers exposed)
     const users = allUsers.filter(
       (u) =>
         u.id !== currentUserId &&
+        !blockedUserIds.has(u.id) &&
         (u.username.toLowerCase().includes(q) ||
           u.displayName.toLowerCase().includes(q) ||
           u.city.toLowerCase().includes(q) ||
@@ -94,19 +97,21 @@ export class SearchService {
     // Match hub listings
     const matchedHubs = hubListings.filter(
       (h) =>
-        h.title.toLowerCase().includes(q) ||
+        !blockedUserIds.has(h.sellerId) &&
+        (h.title.toLowerCase().includes(q) ||
         h.description.toLowerCase().includes(q) ||
         h.category.toLowerCase().includes(q) ||
-        h.city.toLowerCase().includes(q)
+        h.city.toLowerCase().includes(q))
     );
 
     // Match discover posts
     const matchedDiscover = discoverPosts.filter(
       (d) =>
-        d.content.toLowerCase().includes(q) ||
+        !blockedUserIds.has(d.author.id) &&
+        (d.content.toLowerCase().includes(q) ||
         d.category.toLowerCase().includes(q) ||
         d.tags.some((t) => t.toLowerCase().includes(q)) ||
-        d.author.displayName.toLowerCase().includes(q)
+        d.author.displayName.toLowerCase().includes(q))
     );
 
     return {

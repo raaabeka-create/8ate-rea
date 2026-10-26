@@ -14,6 +14,7 @@ import { wallService } from '../../services';
 import { useAuth } from '../../context/AuthContext';
 import { CreateWallPostModal } from './CreateWallPostModal';
 import { WallPostDetailModal } from './WallPostDetailModal';
+import { subscribeToBlocklistChanges } from '../../utils/safetyEvents';
 
 export const WallFeed: React.FC = () => {
   const { user } = useAuth();
@@ -49,6 +50,7 @@ export const WallFeed: React.FC = () => {
 
   useEffect(() => {
     loadWallsData();
+    return subscribeToBlocklistChanges(() => { void loadWallsData(); });
   }, [selectedPairId, user?.id]);
 
   const handleVote = async (e: React.MouseEvent, post: PublicAnonymousWallPost, type: 'up' | 'down') => {

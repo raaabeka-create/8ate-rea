@@ -41,17 +41,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setStorageError(null);
     } catch (err) {
       console.error('Error refreshing auth user', err);
+      // Fail closed: do not keep a stale in-memory identity when storage reads fail.
+      setUser(null);
+      setPrivateInfo(null);
+      setAllUsers([]);
       setStorageError('Some saved browser data could not be read. Avoid making changes until the data is recovered or reset.');
+      throw err;
     }
   };
 
   useEffect(() => {
-    try {
-      initializeLocalStorage();
-    } catch (err) {
-      console.error('Local demo storage could not initialize', err);
-    }
-    refreshUser().finally(() => setIsLoading(false));
+    const bootstrap = async () => {
+      try {
+        initializeLocalStorage();
+        await refreshUser();
+      } catch (err) {
+        console.error('Local demo storage could not initialize', err);
+        setStorageError('Saved browser data could not be loaded. Do not continue editing until storage is recovered or reset.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void bootstrap();
   }, []);
 
   const loginWithPhone = async (phone: string) => {

@@ -19,6 +19,7 @@ import { useAuth } from '../../context/AuthContext';
 import { HubListing, DiscoverPost, GhanaRegion, UserProfile } from '../../types';
 import { hubService, discoverService, safetyService } from '../../services';
 import { GHANA_REGIONS, getCitiesByRegion } from '../../data/ghanaData';
+import { notifyBlocklistChanged } from '../../utils/safetyEvents';
 
 export const UserProfileScreen: React.FC = () => {
   const { user, privateInfo, allUsers, switchUser, logout, updateProfile, refreshUser } = useAuth();
@@ -99,6 +100,7 @@ export const UserProfileScreen: React.FC = () => {
     setProfileError(null);
     try {
       await safetyService.unblockUser(user.id, blockedUserId);
+      notifyBlocklistChanged();
       await refreshUser();
       await loadData();
     } catch (err) {

@@ -5,13 +5,15 @@ import {
   LocalAuthRepository,
   LocalChatRepository,
   LocalDiscoverRepository,
+  LocalHubRepository,
   LocalNotificationRepository,
   LocalWallRepository,
-  LocalHubRepository,
   LocalCallRepository,
   LocalSafetyRepository,
 } from './localStorageRepository';
 import { normalizeGhanaPhone } from '../utils/phone';
+import { SearchService } from '../services/searchService';
+import { ChatService } from '../services/chatService';
 
 class MemoryStorage implements Storage {
   private values = new Map<string, string>();
@@ -38,6 +40,14 @@ class MemoryStorage implements Storage {
 
   setItem(key: string, value: string): void {
     this.values.set(key, String(value));
+  }
+}
+
+class FailingNotificationRepository extends LocalNotificationRepository {
+  override async addNotification(
+    _notification: Parameters<LocalNotificationRepository['addNotification']>[0]
+  ): Promise<Awaited<ReturnType<LocalNotificationRepository['addNotification']>>> {
+    throw new Error('forced notification storage failure');
   }
 }
 
@@ -78,6 +88,26 @@ describe('prototype repository guardrails', () => {
       .rejects.toThrow('Stored 8ATE data for 8ATE_USERS_V1 is corrupted.');
   });
 
+  it('rejects valid JSON with an invalid collection shape instead of silently restoring demo data', async () => {
+    const brokenStorage = new MemoryStorage();
+    brokenStorage.setItem('8ATE_USERS_V1', JSON.stringify({ unexpected: true }));
+    vi.stubGlobal('localStorage', brokenStorage);
+
+    await expect(new LocalAuthRepository().getAllUsers())
+      .rejects.toThrow('Stored 8ATE data for 8ATE_USERS_V1 has an unexpected shape.');
+    expect(brokenStorage.getItem('8ATE_USERS_V1')).toBe(JSON.stringify({ unexpected: true }));
+  });
+
+  it('rejects JSON null and empty-string corruption for collection keys', async () => {
+    const brokenStorage = new MemoryStorage();
+    vi.stubGlobal('localStorage', brokenStorage);
+    brokenStorage.setItem('8ATE_USERS_V1', 'null');
+    await expect(new LocalAuthRepository().getAllUsers()).rejects.toThrow('has an unexpected shape');
+    brokenStorage.setItem('8ATE_USERS_V1', '');
+    await expect(new LocalAuthRepository().getAllUsers()).rejects.toThrow('is corrupted');
+    expect(brokenStorage.getItem('8ATE_USERS_V1')).toBe('');
+  });
+
   it('surfaces browser storage write failures instead of pretending the session was saved', async () => {
     vi.stubGlobal('localStorage', {
       length: 0,
@@ -96,7 +126,10 @@ describe('prototype repository guardrails', () => {
     expect(normalizeGhanaPhone('+233 24 456 7890')).toBe('+233244567890');
     expect(normalizeGhanaPhone('024-456-7890')).toBe('+233244567890');
     expect(normalizeGhanaPhone('00 233 24 456 7890')).toBe('+233244567890');
-    expect(() => normalizeGhanaPhone('1234')).toThrow('Enter a valid Ghanaian phone number');
+    expect(normalizeGhanaPhone('020 123 4567')).toBe('+233201234567');
+    expect(normalizeGhanaPhone('0591234567')).toBe('+233591234567');
+    expect(() => normalizeGhanaPhone('1234')).toThrow('Enter a valid Ghanaian mobile number');
+    expect(() => normalizeGhanaPhone('+233 11 123 4567')).toThrow('Enter a valid Ghanaian mobile number');
     expect(() => normalizeGhanaPhone('abc0244567890')).toThrow('Enter a valid Ghanaian phone number');
   });
 
@@ -148,6 +181,29 @@ describe('prototype repository guardrails', () => {
     await authRepo.setCurrentUserId(null);
     expect(authRepo.getCurrentUserId()).toBeNull();
     await expect(authRepo.setCurrentUserId('missing_user')).rejects.toThrow('Cannot sign in as an unknown user.');
+  });
+
+  it('rejects a raw stored user ID without the explicit demo-session marker', async () => {
+    localStorage.setItem('8ATE_CURRENT_USER_ID', JSON.stringify('user_kwame'));
+    const chats = new LocalChatRepository();
+    await expect(chats.getConversations('user_kwame'))
+      .rejects.toThrow('Only the signed-in demo user can read conversations.');
+    await expect(chats.createConversation(['user_kwame', 'user_ama']))
+      .rejects.toThrow('The signed-in user must be a conversation member.');
+
+    const otherUser = await new LocalAuthRepository().getUserProfile('user_ama');
+    if (!otherUser) throw new Error('Expected seeded user_ama profile in test setup.');
+    const calls = new LocalCallRepository();
+    await expect(calls.addCallRecord({
+      ownerUserId: 'user_kwame',
+      otherUser,
+      type: 'voice',
+      direction: 'outgoing',
+      status: 'completed',
+      startedAt: Date.now(),
+      durationSeconds: 30,
+    })).rejects.toThrow('Call history can only be written for the signed-in user.');
+    expect(new LocalAuthRepository().getCurrentUserId()).toBeNull();
   });
 
   it('prevents non-members from reading or sending messages in a conversation', async () => {
@@ -402,4 +458,426 @@ describe('prototype repository guardrails', () => {
     expect(kwamePosts.find((post) => post.id === 'disc_post_1')?.isLiked).toBe(false);
     expect(amaPosts.find((post) => post.id === 'disc_post_1')?.isLiked).toBe(true);
   });
+  it('hides blocked users from Discover, Hubs, anonymous Walls, comments, and global search', async () => {
+    const authRepo = new LocalAuthRepository();
+    const safety = new LocalSafetyRepository();
+    const discover = new LocalDiscoverRepository();
+    const hubs = new LocalHubRepository();
+    const walls = new LocalWallRepository();
+    const search = new SearchService();
+
+    await signInAs('user_ama');
+    const ama = await authRepo.getUserProfile('user_ama');
+    expect(ama).toBeDefined();
+
+    const blockedDiscoverPost = await discover.createPost(
+      'user_ama',
+      'zebra-block-test-token Discover content',
+      'Business',
+      ['zebra-block-test-token']
+    );
+    const blockedListing = await hubs.createListing({
+      title: 'zebra-block-test-token listing',
+      description: 'Listing from a blocked seller',
+      price: 10,
+      region: 'Ashanti',
+      city: 'Kumasi',
+      category: 'Marketplace',
+      sellerId: 'user_ama',
+      seller: {
+        id: ama!.id,
+        username: ama!.username,
+        displayName: ama!.displayName,
+        avatarUrl: ama!.avatarUrl,
+        region: ama!.region,
+        city: ama!.city,
+      },
+      images: ['https://example.com/blocked-listing.jpg'],
+    });
+    const blockedWallPost = await walls.createPost(
+      'wall_kumasi_accra',
+      'Kumasi',
+      'Accra',
+      'zebra-block-test-token anonymous Wall content',
+      2,
+      'user_ama'
+    );
+    await walls.createReply(blockedWallPost.id, 'Reply from blocked account', 'user_ama');
+
+    await signInAs('user_kwame');
+    const kwamePost = await discover.createPost(
+      'user_kwame',
+      'Public parent post for comment filtering',
+      'Business',
+      ['comment-filter-test']
+    );
+    await signInAs('user_ama');
+    await discover.addComment(kwamePost.id, 'user_ama', 'Comment from blocked account');
+
+    await signInAs('user_kwame');
+    await safety.blockUser('user_kwame', 'user_ama');
+
+    const visibleDiscoverPosts = await discover.getPosts(undefined, undefined, 'user_kwame');
+    expect(visibleDiscoverPosts.some((post) => post.id === blockedDiscoverPost.id)).toBe(false);
+    await expect(discover.getPostById(blockedDiscoverPost.id, 'user_kwame')).resolves.toBeNull();
+    await expect(discover.toggleLikePost(blockedDiscoverPost.id, 'user_kwame'))
+      .rejects.toThrow('You cannot interact with a post from a user you blocked.');
+    await expect(discover.toggleBookmarkPost(blockedDiscoverPost.id, 'user_kwame'))
+      .rejects.toThrow('You cannot bookmark a post from a user you blocked.');
+    expect(await discover.getComments(kwamePost.id, 'user_kwame')).toHaveLength(0);
+
+    const visibleListings = await hubs.getListings({ userId: 'user_kwame' });
+    expect(visibleListings.some((listing) => listing.id === blockedListing.id)).toBe(false);
+    await expect(hubs.getListingById(blockedListing.id, 'user_kwame')).resolves.toBeNull();
+    await expect(hubs.toggleSaveListing(blockedListing.id, 'user_kwame'))
+      .rejects.toThrow('You cannot save a listing from a user you blocked.');
+
+    const visibleWalls = await walls.getActivePosts(undefined, undefined, undefined, 'user_kwame');
+    expect(visibleWalls.some((post) => post.id === blockedWallPost.id)).toBe(false);
+    await expect(walls.getPostById(blockedWallPost.id, 'user_kwame')).resolves.toBeNull();
+    await expect(walls.getReplies(blockedWallPost.id, 'user_kwame'))
+      .rejects.toThrow('This content is unavailable because you blocked its author.');
+
+    const results = await search.globalSearch('zebra-block-test-token', 'user_kwame');
+    expect(results.users.some((user) => user.id === 'user_ama')).toBe(false);
+    expect(results.hubs.some((listing) => listing.id === blockedListing.id)).toBe(false);
+    expect(results.discover.some((post) => post.id === blockedDiscoverPost.id)).toBe(false);
+    expect(results.walls.some((post) => post.id === blockedWallPost.id)).toBe(false);
+  });
+
+  it('removes media and reactions when deleting a message and rejects reactions to tombstones', async () => {
+    await signInAs('user_kwame');
+    const chats = new LocalChatRepository();
+    const sent = await chats.sendMessage(
+      'conv_kwame_ama',
+      'user_kwame',
+      'Photo attachment',
+      'image',
+      'https://example.com/test-photo.jpg'
+    );
+    await chats.toggleMessageReaction(sent.id, sent.conversationId, 'user_kwame', '🔥');
+    await chats.deleteMessage(sent.id, sent.conversationId, 'user_kwame');
+
+    const deleted = (await chats.getMessages('conv_kwame_ama', 'user_kwame'))
+      .find((message) => message.id === sent.id);
+    expect(deleted?.deletedForEveryone).toBe(true);
+    expect(deleted?.content).toBe('This message was deleted');
+    expect(deleted?.mediaUrl).toBeUndefined();
+    expect(deleted?.audioDurationSec).toBeUndefined();
+    expect(deleted?.reactions).toEqual([]);
+
+    await expect(chats.toggleMessageReaction(sent.id, sent.conversationId, 'user_kwame', '❤️'))
+      .rejects.toThrow('Deleted messages cannot be reacted to.');
+    await expect(chats.deleteMessage(sent.id, sent.conversationId, 'user_kwame'))
+      .rejects.toThrow('Message has already been deleted.');
+  });
+
+  it('rolls back a partially failed multi-record message write', async () => {
+    await signInAs('user_kwame');
+    const initialStorage = globalThis.localStorage;
+    const originalMessages = initialStorage.getItem('8ATE_MESSAGES_V1');
+    const originalConversations = initialStorage.getItem('8ATE_CONVERSATIONS_V1');
+    const backing = new MemoryStorage();
+
+    for (let index = 0; index < initialStorage.length; index += 1) {
+      const key = initialStorage.key(index);
+      if (key !== null) {
+        const value = initialStorage.getItem(key);
+        if (value !== null) backing.setItem(key, value);
+      }
+    }
+
+    const failingStorage = {
+      get length() { return backing.length; },
+      clear: () => backing.clear(),
+      getItem: (key: string) => backing.getItem(key),
+      key: (index: number) => backing.key(index),
+      removeItem: (key: string) => backing.removeItem(key),
+      setItem: (key: string, value: string) => {
+        if (key === '8ATE_CONVERSATIONS_V1') throw new Error('forced second-write failure');
+        backing.setItem(key, value);
+      },
+    } satisfies Storage;
+    vi.stubGlobal('localStorage', failingStorage);
+
+    await expect(new LocalChatRepository().sendMessage(
+      'conv_kwame_ama',
+      'user_kwame',
+      'This must not partially persist'
+    )).rejects.toThrow('Multi-record update was rolled back where possible.');
+
+    expect(backing.getItem('8ATE_MESSAGES_V1')).toBe(originalMessages);
+    expect(backing.getItem('8ATE_CONVERSATIONS_V1')).toBe(originalConversations);
+  });
+
+  it('normalizes self-report checks and prevents reporting messages outside accessible chats', async () => {
+    await signInAs('user_kwame');
+    const chats = new LocalChatRepository();
+    const safety = new LocalSafetyRepository();
+    const privateMessage = await chats.sendMessage(
+      'conv_kwame_ama',
+      'user_kwame',
+      'Fictional private message for report access testing'
+    );
+
+    await expect(safety.submitReport({
+      targetType: 'user',
+      targetId: ' user_kwame ',
+      targetSummary: 'My own account',
+      reporterUserId: 'user_kwame',
+      reason: 'Spam',
+    })).rejects.toThrow('You cannot report your own account.');
+
+    await signInAs('user_kofi');
+    await expect(safety.submitReport({
+      targetType: 'message',
+      targetId: privateMessage.id,
+      targetSummary: 'Private message from another conversation',
+      reporterUserId: 'user_kofi',
+      reason: 'Spam',
+    })).rejects.toThrow('The item you are reporting could not be found.');
+  });
+
+  it('rejects invalid Wall votes and out-of-plan Hub and Discover categories', async () => {
+    await signInAs('user_kwame');
+    const walls = new LocalWallRepository();
+    const hubs = new LocalHubRepository();
+    const discover = new LocalDiscoverRepository();
+    const kwame = await auth.getUserProfile('user_kwame');
+    expect(kwame).toBeDefined();
+
+    await expect(walls.votePost('missing-post', 'sideways' as any, 'user_kwame'))
+      .rejects.toThrow('Vote must be either up or down.');
+
+    await expect(hubs.createListing({
+      title: 'Invalid category listing',
+      description: 'This should be rejected',
+      price: 10,
+      region: 'Ashanti',
+      city: 'Kumasi',
+      category: 'InvalidCategory' as any,
+      sellerId: 'user_kwame',
+      seller: {
+        id: kwame!.id,
+        username: kwame!.username,
+        displayName: kwame!.displayName,
+        avatarUrl: kwame!.avatarUrl,
+        region: kwame!.region,
+        city: kwame!.city,
+      },
+      images: ['https://example.com/listing.jpg'],
+    })).rejects.toThrow('Select a valid Hub listing category.');
+
+    await expect(discover.createPost(
+      'user_kwame',
+      'Invalid category post',
+      'InvalidCategory' as any,
+      []
+    )).rejects.toThrow('Select a valid Discover category.');
+  });
+
+  it('fails closed when browser storage cannot be read', () => {
+    vi.stubGlobal('localStorage', {
+      length: 0,
+      clear: () => undefined,
+      getItem: () => { throw new Error('forced read failure'); },
+      key: () => null,
+      removeItem: () => undefined,
+      setItem: () => undefined,
+    } satisfies Storage);
+
+    expect(() => new LocalAuthRepository().getCurrentUserId())
+      .toThrow('8ATE could not read browser storage.');
+  });
+
+  it('rolls back account registration if a later storage write fails', async () => {
+    const initialStorage = globalThis.localStorage;
+    const originalUsers = initialStorage.getItem('8ATE_USERS_V1');
+    const originalAccounts = initialStorage.getItem('8ATE_PRIVATE_ACCOUNTS_V1');
+    const backing = new MemoryStorage();
+
+    for (let index = 0; index < initialStorage.length; index += 1) {
+      const key = initialStorage.key(index);
+      if (key !== null) {
+        const value = initialStorage.getItem(key);
+        if (value !== null) backing.setItem(key, value);
+      }
+    }
+
+    const failingStorage = {
+      get length() { return backing.length; },
+      clear: () => backing.clear(),
+      getItem: (key: string) => backing.getItem(key),
+      key: (index: number) => backing.key(index),
+      removeItem: (key: string) => backing.removeItem(key),
+      setItem: (key: string, value: string) => {
+        if (key === '8ATE_PRIVATE_ACCOUNTS_V1') throw new Error('forced account write failure');
+        backing.setItem(key, value);
+      },
+    } satisfies Storage;
+    vi.stubGlobal('localStorage', failingStorage);
+
+    await expect(new LocalAuthRepository().createUser(
+      {
+        username: 'new_member_transaction',
+        displayName: 'New Member',
+        avatarUrl: 'https://example.com/new-member.png',
+        bio: '',
+        region: 'Ashanti',
+        city: 'Kumasi',
+      },
+      { phoneNumber: '+233 21 987 6543' }
+    )).rejects.toThrow('Multi-record update was rolled back where possible.');
+
+    expect(backing.getItem('8ATE_USERS_V1')).toBe(originalUsers);
+    expect(backing.getItem('8ATE_PRIVATE_ACCOUNTS_V1')).toBe(originalAccounts);
+    expect(backing.getItem('8ATE_CURRENT_USER_ID')).toBeNull();
+  });
+
+  it('edits only the sender’s text message within 15 minutes and updates the conversation preview', async () => {
+    await signInAs('user_kwame');
+    const chats = new LocalChatRepository();
+    const message = await chats.sendMessage(
+      'conv_kwame_ama',
+      'user_kwame',
+      'Original message text'
+    );
+
+    const edited = await chats.editMessage(
+      message.id,
+      message.conversationId,
+      'user_kwame',
+      '  Corrected message text  '
+    );
+    expect(edited.content).toBe('Corrected message text');
+    expect(edited.editedAt).toBeDefined();
+    expect((await chats.getConversationById('conv_kwame_ama', 'user_kwame'))?.lastMessage?.content)
+      .toBe('Corrected message text');
+
+    await signInAs('user_ama');
+    await expect(chats.editMessage(
+      message.id,
+      message.conversationId,
+      'user_ama',
+      'Attempted unauthorized edit'
+    )).rejects.toThrow('You can only edit messages you sent.');
+
+    await signInAs('user_kwame');
+    const allMessages = JSON.parse(localStorage.getItem('8ATE_MESSAGES_V1') || '{}') as Record<string, Array<{ id: string; timestamp: number }>>;
+    const stored = allMessages[message.conversationId].find((item) => item.id === message.id);
+    expect(stored).toBeDefined();
+    stored!.timestamp = Date.now() - 16 * 60 * 1000;
+    localStorage.setItem('8ATE_MESSAGES_V1', JSON.stringify(allMessages));
+
+    await expect(chats.editMessage(
+      message.id,
+      message.conversationId,
+      'user_kwame',
+      'Too late to edit'
+    )).rejects.toThrow('Message editing is only allowed within 15 minutes.');
+  });
+
+  it('rejects editing media, deleted messages, and empty edits', async () => {
+    await signInAs('user_kwame');
+    const chats = new LocalChatRepository();
+    const image = await chats.sendMessage(
+      'conv_kwame_ama',
+      'user_kwame',
+      'Image caption',
+      'image',
+      'https://example.com/edit-image.jpg'
+    );
+    await expect(chats.editMessage(image.id, image.conversationId, 'user_kwame', 'New caption'))
+      .rejects.toThrow('Only text messages can be edited.');
+
+    const textMessage = await chats.sendMessage('conv_kwame_ama', 'user_kwame', 'Text to delete');
+    await chats.deleteMessage(textMessage.id, textMessage.conversationId, 'user_kwame');
+    await expect(chats.editMessage(textMessage.id, textMessage.conversationId, 'user_kwame', 'Edited'))
+      .rejects.toThrow('Deleted messages cannot be edited.');
+
+    const another = await chats.sendMessage('conv_kwame_ama', 'user_kwame', 'Text to edit');
+    await expect(chats.editMessage(another.id, another.conversationId, 'user_kwame', '   '))
+      .rejects.toThrow('Edited messages must contain 1–5000 characters.');
+  });
+
+  it('tracks per-recipient read receipts for direct and group messages', async () => {
+    await signInAs('user_kwame');
+    const chats = new LocalChatRepository();
+    const directMessage = await chats.sendMessage(
+      'conv_kwame_ama',
+      'user_kwame',
+      'Direct read receipt test'
+    );
+
+    await signInAs('user_ama');
+    await chats.markConversationAsRead('conv_kwame_ama', 'user_ama');
+    const directMessages = await chats.getMessages('conv_kwame_ama', 'user_ama');
+    const directReceipt = directMessages.find((message) => message.id === directMessage.id);
+    expect(directReceipt?.readByUserIds).toEqual(expect.arrayContaining(['user_kwame', 'user_ama']));
+    expect(directReceipt?.status).toBe('read');
+
+    await signInAs('user_kwame');
+    const group = await chats.createConversation(['user_kwame', 'user_ama', 'user_kofi'], true, 'Receipt test group');
+    const groupMessage = await chats.sendMessage(group.id, 'user_kwame', 'Group read receipt test');
+
+    await signInAs('user_ama');
+    await chats.markConversationAsRead(group.id, 'user_ama');
+    const afterAma = (await chats.getMessages(group.id, 'user_ama')).find((message) => message.id === groupMessage.id);
+    expect(afterAma?.readByUserIds).toEqual(expect.arrayContaining(['user_kwame', 'user_ama']));
+    expect(afterAma?.readByUserIds).not.toContain('user_kofi');
+    expect(afterAma?.status).not.toBe('read');
+
+    await signInAs('user_kofi');
+    await chats.markConversationAsRead(group.id, 'user_kofi');
+    const afterKofi = (await chats.getMessages(group.id, 'user_kofi')).find((message) => message.id === groupMessage.id);
+    expect(afterKofi?.readByUserIds).toEqual(expect.arrayContaining(['user_kwame', 'user_ama', 'user_kofi']));
+    expect(afterKofi?.status).toBe('read');
+  });
+
+  it('creates recipient-only local notifications after a message is saved', async () => {
+    const chatService = new ChatService(new LocalChatRepository(), new LocalNotificationRepository());
+    const notifications = new LocalNotificationRepository();
+    const sender = await auth.getUserProfile('user_kwame');
+
+    await signInAs('user_kwame');
+    await chatService.sendTextMessage(
+      'conv_kwame_ama',
+      'user_kwame',
+      'unique-notification-preview-8ate'
+    );
+
+    await signInAs('user_ama');
+    const amaNotifications = await notifications.getNotifications('user_ama');
+    expect(amaNotifications.some((item) =>
+      item.type === 'new_message' &&
+      item.title === `${sender?.displayName} sent you a message` &&
+      item.body === 'unique-notification-preview-8ate' &&
+      item.targetUrl === '/chats/conv_kwame_ama' &&
+      item.senderAvatar === sender?.avatarUrl
+    )).toBe(true);
+
+    await signInAs('user_kwame');
+    const kwameNotifications = await notifications.getNotifications('user_kwame');
+    expect(kwameNotifications.some((item) => item.body === 'unique-notification-preview-8ate')).toBe(false);
+  });
+
+  it('keeps a saved message successful when local notification persistence fails', async () => {
+    const chatService = new ChatService(new LocalChatRepository(), new FailingNotificationRepository());
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await signInAs('user_kwame');
+
+    try {
+      await expect(chatService.sendTextMessage(
+        'conv_kwame_ama',
+        'user_kwame',
+        'message-survives-notification-failure'
+      )).resolves.toMatchObject({ content: 'message-survives-notification-failure' });
+
+      const saved = await new LocalChatRepository().getMessages('conv_kwame_ama', 'user_kwame');
+      expect(saved.some((message) => message.content === 'message-survives-notification-failure')).toBe(true);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
 });

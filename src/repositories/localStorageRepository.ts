@@ -19,6 +19,8 @@ import {
   PrivateWallModerationData,
   WallReply,
   HubListing,
+  HubCategory,
+  GhanaRegion,
   DiscoverPost,
   DiscoverCategory,
   DiscoverComment,
@@ -72,30 +74,101 @@ const STORAGE_KEYS = {
   USER_VOTES: '8ATE_USER_VOTES_V1',
 };
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isRecordArray(value: unknown): value is Record<string, unknown>[] {
+  return Array.isArray(value) && value.every(isPlainRecord);
+}
+
+/**
+ * Validate the persisted value's basic structure before casting it to a domain type.
+ * This detects common local corruption; it is not a substitute for server validation.
+ */
+function hasExpectedStorageShape(key: string, parsed: unknown, defaultValue: unknown): boolean {
+  if (parsed === null) return defaultValue === null;
+  if (defaultValue === null) return typeof parsed === 'string';
+  if (Array.isArray(defaultValue)) return isRecordArray(parsed);
+  if (typeof defaultValue === 'string') return typeof parsed === 'string';
+  if (typeof defaultValue === 'number') return typeof parsed === 'number' && Number.isFinite(parsed);
+  if (typeof defaultValue === 'boolean') return typeof parsed === 'boolean';
+
+  if (isPlainRecord(defaultValue)) {
+    if (!isPlainRecord(parsed)) return false;
+    const defaultValues = Object.values(defaultValue);
+    if (defaultValues.length > 0 && defaultValues.every(Array.isArray)) {
+      return Object.values(parsed).every(isRecordArray);
+    }
+    if (defaultValues.length > 0 && defaultValues.every(isPlainRecord)) {
+      return Object.values(parsed).every(isPlainRecord);
+    }
+    if (key === STORAGE_KEYS.PRIVATE_ACCOUNTS || key === STORAGE_KEYS.WALL_MODERATION) {
+      return Object.values(parsed).every(isPlainRecord);
+    }
+    if (key === STORAGE_KEYS.MESSAGES || key === STORAGE_KEYS.WALL_REPLIES || key === STORAGE_KEYS.DISCOVER_COMMENTS) {
+      return Object.values(parsed).every(isRecordArray);
+    }
+    if (key === STORAGE_KEYS.USER_VOTES) {
+      return Object.values(parsed).every((value) => value === 'up' || value === 'down');
+    }
+    return true;
+  }
+
+  return typeof parsed === typeof defaultValue;
+}
+
 function getStorage<T>(key: string, defaultValue: T): T {
+  const cloneDefault = (): T => JSON.parse(JSON.stringify(defaultValue)) as T;
   let raw: string | null;
   try {
     raw = localStorage.getItem(key);
   } catch (error) {
     console.error(`Error reading ${key} from browser storage`, error);
-    return defaultValue;
+    throw new Error('8ATE could not read browser storage. Storage may be unavailable.');
   }
-  if (!raw) return defaultValue;
+  if (raw === null) return cloneDefault();
+
+  let parsed: unknown;
   try {
-    return JSON.parse(raw) as T;
+    parsed = JSON.parse(raw);
   } catch (error) {
     console.error(`Stored data for ${key} is unreadable; refusing to replace it with demo defaults.`, error);
     throw new Error(`Stored 8ATE data for ${key} is corrupted. No replacement data was written.`);
   }
+
+  if (!hasExpectedStorageShape(key, parsed, defaultValue)) {
+    console.error(`Stored data for ${key} has an unexpected shape; refusing to replace it with demo defaults.`);
+    throw new Error(`Stored 8ATE data for ${key} has an unexpected shape. No replacement data was written.`);
+  }
+  return parsed as T;
 }
 
 function assertCurrentUser(userId: string, action: string): void {
+  const sessionMarker = getStorage<string | null>(STORAGE_KEYS.SESSION_MARKER, null);
   const currentUserId = getStorage<string | null>(STORAGE_KEYS.CURRENT_USER_ID, null);
-  if (!currentUserId || currentUserId !== userId) {
+  if (sessionMarker !== 'explicit' || !currentUserId || currentUserId !== userId) {
     throw new Error(`Only the signed-in demo user can ${action}.`);
   }
 }
 
+
+function getBlockedUserIds(userId: string): Set<string> {
+  const accounts = getStorage<Record<string, PrivateAccountInfo>>(STORAGE_KEYS.PRIVATE_ACCOUNTS, SEED_PRIVATE_ACCOUNTS);
+  return new Set(accounts[userId]?.blockedUserIds ?? []);
+}
+
+function isContentOwnedByBlockedUser(userId: string, contentId: string): boolean {
+  const moderation = getStorage<Record<string, PrivateWallModerationData>>(STORAGE_KEYS.WALL_MODERATION, {});
+  const ownerUserId = moderation[contentId]?.realOwnerUserId;
+  return Boolean(ownerUserId && getBlockedUserIds(userId).has(ownerUserId));
+}
+
+function assertContentNotBlocked(userId: string, contentId: string): void {
+  if (isContentOwnedByBlockedUser(userId, contentId)) {
+    throw new Error('This content is unavailable because you blocked its author.');
+  }
+}
 
 function setStorage<T>(key: string, value: T): void {
   try {
@@ -103,6 +176,39 @@ function setStorage<T>(key: string, value: T): void {
   } catch (e) {
     console.error(`Error writing ${key} to storage`, e);
     throw new Error('8ATE could not save this change in browser storage. Storage may be full or unavailable.');
+  }
+}
+
+/**
+ * Persist related records as one best-effort localStorage transaction.
+ * localStorage has no native transaction support, so restore previous raw
+ * values if a later write fails. This is a prototype reliability safeguard,
+ * not a database transaction or a security boundary.
+ */
+function setStorageBatch(entries: Array<[string, unknown]>): void {
+  const snapshots: Array<{ key: string; previous: string | null; serialized: string }> = [];
+  const written: Array<{ key: string; previous: string | null; serialized: string }> = [];
+  try {
+    for (const [key, value] of entries) {
+      const serialized = JSON.stringify(value);
+      if (serialized === undefined) throw new Error(`Unable to serialize stored value for ${key}.`);
+      snapshots.push({ key, previous: localStorage.getItem(key), serialized });
+    }
+    for (const snapshot of snapshots) {
+      localStorage.setItem(snapshot.key, snapshot.serialized);
+      written.push(snapshot);
+    }
+  } catch (error) {
+    for (const snapshot of [...written].reverse()) {
+      try {
+        if (snapshot.previous === null) localStorage.removeItem(snapshot.key);
+        else localStorage.setItem(snapshot.key, snapshot.previous);
+      } catch (rollbackError) {
+        console.error(`Unable to roll back browser storage key ${snapshot.key}`, rollbackError);
+      }
+    }
+    console.error('Multi-record browser storage update failed', error);
+    throw new Error('8ATE could not save this change in browser storage. Multi-record update was rolled back where possible.');
   }
 }
 
@@ -129,39 +235,22 @@ export function initializeLocalStorage(): void {
       console.error('Could not clear a legacy implicit session', error);
     }
   }
-  if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
-    setStorage(STORAGE_KEYS.USERS, SEED_USERS);
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.PRIVATE_ACCOUNTS)) {
-    setStorage(STORAGE_KEYS.PRIVATE_ACCOUNTS, SEED_PRIVATE_ACCOUNTS);
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.CONVERSATIONS)) {
-    setStorage(STORAGE_KEYS.CONVERSATIONS, SEED_CONVERSATIONS);
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.MESSAGES)) {
-    setStorage(STORAGE_KEYS.MESSAGES, SEED_MESSAGES);
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.WALL_PAIRS)) {
-    setStorage(STORAGE_KEYS.WALL_PAIRS, SEED_WALL_PAIRS);
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.WALL_POSTS)) {
-    setStorage(STORAGE_KEYS.WALL_POSTS, SEED_WALL_POSTS);
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.WALL_REPLIES)) {
-    setStorage(STORAGE_KEYS.WALL_REPLIES, SEED_WALL_REPLIES);
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.HUB_LISTINGS)) {
-    setStorage(STORAGE_KEYS.HUB_LISTINGS, SEED_HUB_LISTINGS);
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.DISCOVER_POSTS)) {
-    setStorage(STORAGE_KEYS.DISCOVER_POSTS, SEED_DISCOVER_POSTS);
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.CALL_RECORDS)) {
-    setStorage(STORAGE_KEYS.CALL_RECORDS, SEED_CALL_RECORDS);
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS)) {
-    setStorage(STORAGE_KEYS.NOTIFICATIONS, SEED_NOTIFICATIONS);
-  }
+  // Seed all missing collections as one best-effort transaction.
+  const defaults: Array<[string, unknown]> = [
+    [STORAGE_KEYS.USERS, SEED_USERS],
+    [STORAGE_KEYS.PRIVATE_ACCOUNTS, SEED_PRIVATE_ACCOUNTS],
+    [STORAGE_KEYS.CONVERSATIONS, SEED_CONVERSATIONS],
+    [STORAGE_KEYS.MESSAGES, SEED_MESSAGES],
+    [STORAGE_KEYS.WALL_PAIRS, SEED_WALL_PAIRS],
+    [STORAGE_KEYS.WALL_POSTS, SEED_WALL_POSTS],
+    [STORAGE_KEYS.WALL_REPLIES, SEED_WALL_REPLIES],
+    [STORAGE_KEYS.HUB_LISTINGS, SEED_HUB_LISTINGS],
+    [STORAGE_KEYS.DISCOVER_POSTS, SEED_DISCOVER_POSTS],
+    [STORAGE_KEYS.CALL_RECORDS, SEED_CALL_RECORDS],
+    [STORAGE_KEYS.NOTIFICATIONS, SEED_NOTIFICATIONS],
+  ];
+  const missing = defaults.filter(([key]) => localStorage.getItem(key) === null);
+  if (missing.length) setStorageBatch(missing);
 }
 
 // Anonymous alias generator
@@ -204,8 +293,10 @@ export class LocalAuthRepository implements IAuthRepository {
     if (userId) {
       const users = getStorage<UserProfile[]>(STORAGE_KEYS.USERS, SEED_USERS);
       if (!users.some((user) => user.id === userId)) throw new Error('Cannot sign in as an unknown user.');
-      setStorage(STORAGE_KEYS.CURRENT_USER_ID, userId);
-      setStorage(STORAGE_KEYS.SESSION_MARKER, 'explicit');
+      setStorageBatch([
+        [STORAGE_KEYS.CURRENT_USER_ID, userId],
+        [STORAGE_KEYS.SESSION_MARKER, 'explicit'],
+      ]);
       return;
     }
     // Removing keys succeeds even when storage is full; logout should not need extra quota.
@@ -261,10 +352,6 @@ export class LocalAuthRepository implements IAuthRepository {
   ): Promise<{ user: UserProfile; privateInfo: PrivateAccountInfo }> {
     const users = getStorage<UserProfile[]>(STORAGE_KEYS.USERS, SEED_USERS);
     const accounts = getStorage<Record<string, PrivateAccountInfo>>(STORAGE_KEYS.PRIVATE_ACCOUNTS, SEED_PRIVATE_ACCOUNTS);
-    const usersBefore = [...users];
-    const accountsBefore = { ...accounts };
-    const previousCurrentUserId = this.getCurrentUserId();
-
     // Enforce username and phone uniqueness again at the repository boundary.
     const cleanUsername = profile.username.trim().toLowerCase().replace(/^@/, '');
     if (!/^[a-z0-9_]{3,24}$/.test(cleanUsername)) {
@@ -316,21 +403,12 @@ export class LocalAuthRepository implements IAuthRepository {
     users.push(newUser);
     accounts[newUserId] = newPrivateInfo;
 
-    try {
-      setStorage(STORAGE_KEYS.USERS, users);
-      setStorage(STORAGE_KEYS.PRIVATE_ACCOUNTS, accounts);
-      await this.setCurrentUserId(newUserId);
-    } catch (error) {
-      // Best-effort rollback so quota/storage failures do not leave half-created accounts.
-      try {
-        setStorage(STORAGE_KEYS.USERS, usersBefore);
-        setStorage(STORAGE_KEYS.PRIVATE_ACCOUNTS, accountsBefore);
-        await this.setCurrentUserId(previousCurrentUserId);
-      } catch (rollbackError) {
-        console.error('Account registration rollback was incomplete', rollbackError);
-      }
-      throw error;
-    }
+    setStorageBatch([
+      [STORAGE_KEYS.USERS, users],
+      [STORAGE_KEYS.PRIVATE_ACCOUNTS, accounts],
+      [STORAGE_KEYS.CURRENT_USER_ID, newUserId],
+      [STORAGE_KEYS.SESSION_MARKER, 'explicit'],
+    ]);
 
     return { user: newUser, privateInfo: newPrivateInfo };
   }
@@ -476,8 +554,11 @@ export class LocalChatRepository implements IChatRepository {
     const convs = getStorage<Conversation[]>(STORAGE_KEYS.CONVERSATIONS, SEED_CONVERSATIONS);
     const users = getStorage<UserProfile[]>(STORAGE_KEYS.USERS, SEED_USERS);
     participantIds = Array.from(new Set(participantIds.map((id) => id.trim()).filter(Boolean)));
+    const sessionMarker = getStorage<string | null>(STORAGE_KEYS.SESSION_MARKER, null);
     const currentUserId = getStorage<string | null>(STORAGE_KEYS.CURRENT_USER_ID, null);
-    if (!currentUserId || !participantIds.includes(currentUserId)) throw new Error('The signed-in user must be a conversation member.');
+    if (sessionMarker !== 'explicit' || !currentUserId || !participantIds.includes(currentUserId)) {
+      throw new Error('The signed-in user must be a conversation member.');
+    }
     if (participantIds.length < 2) throw new Error('A conversation requires at least two distinct members.');
     if (participantIds.length > 100) throw new Error('A conversation cannot have more than 100 members.');
     if (!isGroup && participantIds.length !== 2) throw new Error('A direct conversation must have exactly two members.');
@@ -582,12 +663,12 @@ export class LocalChatRepository implements IChatRepository {
       audioDurationSec,
       timestamp: Date.now(),
       status: 'sent',
+      readByUserIds: [senderId],
       reactions: [],
     };
 
     messageList.push(newMsg);
     allMessages[conversationId] = messageList;
-    setStorage(STORAGE_KEYS.MESSAGES, allMessages);
 
     // Update last message and recipient-specific unread counts.
     const unreadCounts = conversation.unreadCountsByUser
@@ -601,9 +682,53 @@ export class LocalChatRepository implements IChatRepository {
     conversation.lastMessage = newMsg;
     conversation.updatedAt = Date.now();
     convs[convIndex] = conversation;
-    setStorage(STORAGE_KEYS.CONVERSATIONS, convs);
+    setStorageBatch([
+      [STORAGE_KEYS.MESSAGES, allMessages],
+      [STORAGE_KEYS.CONVERSATIONS, convs],
+    ]);
 
     return newMsg;
+  }
+
+  async editMessage(messageId: string, conversationId: string, userId: string, content: string): Promise<ChatMessage> {
+    const convs = getStorage<Conversation[]>(STORAGE_KEYS.CONVERSATIONS, SEED_CONVERSATIONS);
+    const convIndex = convs.findIndex((item) => item.id === conversationId);
+    if (convIndex === -1 || !convs[convIndex].participantIds.includes(userId)) {
+      throw new Error('You are not a member of this conversation.');
+    }
+    assertCurrentUser(userId, 'edit a message');
+
+    const allMessages = getStorage<Record<string, ChatMessage[]>>(STORAGE_KEYS.MESSAGES, SEED_MESSAGES);
+    const messages = allMessages[conversationId] || [];
+    const messageIndex = messages.findIndex((message) => message.id === messageId && message.conversationId === conversationId);
+    if (messageIndex === -1) throw new Error('Message not found.');
+    const message = messages[messageIndex];
+    if (message.senderId !== userId) throw new Error('You can only edit messages you sent.');
+    if (message.type !== 'text') throw new Error('Only text messages can be edited.');
+    if (message.deletedForEveryone) throw new Error('Deleted messages cannot be edited.');
+
+    const now = Date.now();
+    if (now < message.timestamp || now - message.timestamp > 15 * 60 * 1000) {
+      throw new Error('Message editing is only allowed within 15 minutes.');
+    }
+    const cleanContent = content.trim();
+    if (!cleanContent || cleanContent.length > 5000) {
+      throw new Error('Edited messages must contain 1–5000 characters.');
+    }
+
+    const editedMessage: ChatMessage = { ...message, content: cleanContent, editedAt: now };
+    messages[messageIndex] = editedMessage;
+    allMessages[conversationId] = messages;
+    if (convs[convIndex].lastMessage?.id === messageId) {
+      convs[convIndex].lastMessage = editedMessage;
+      convs[convIndex].updatedAt = now;
+    }
+
+    setStorageBatch([
+      [STORAGE_KEYS.MESSAGES, allMessages],
+      [STORAGE_KEYS.CONVERSATIONS, convs],
+    ]);
+    return editedMessage;
   }
 
   async toggleMessageReaction(messageId: string, conversationId: string, userId: string, emoji: string): Promise<ChatMessage> {
@@ -619,6 +744,7 @@ export class LocalChatRepository implements IChatRepository {
     if (msgIndex === -1) throw new Error('Message not found');
 
     const msg = messages[msgIndex];
+    if (msg.deletedForEveryone) throw new Error('Deleted messages cannot be reacted to.');
     msg.reactions = msg.reactions || [];
     const existing = msg.reactions.find((reaction) => reaction.userId === userId);
     if (existing?.emoji === cleanEmoji) {
@@ -646,15 +772,25 @@ export class LocalChatRepository implements IChatRepository {
     if (msgIndex === -1) throw new Error('Message not found.');
     if (messages[msgIndex].senderId !== requesterUserId) throw new Error('You can only delete messages you sent.');
     assertCurrentUser(requesterUserId, 'delete a message');
-    messages[msgIndex].deletedForEveryone = true;
-    messages[msgIndex].content = 'This message was deleted';
+    if (messages[msgIndex].deletedForEveryone) throw new Error('Message has already been deleted.');
+    messages[msgIndex] = {
+      ...messages[msgIndex],
+      deletedForEveryone: true,
+      content: 'This message was deleted',
+      mediaUrl: undefined,
+      audioDurationSec: undefined,
+      editedAt: undefined,
+      reactions: [],
+    };
     if (convs[convIndex].lastMessage?.id === messageId) {
       convs[convIndex].lastMessage = messages[msgIndex];
       convs[convIndex].updatedAt = Date.now();
     }
     allMessages[conversationId] = messages;
-    setStorage(STORAGE_KEYS.MESSAGES, allMessages);
-    setStorage(STORAGE_KEYS.CONVERSATIONS, convs);
+    setStorageBatch([
+      [STORAGE_KEYS.MESSAGES, allMessages],
+      [STORAGE_KEYS.CONVERSATIONS, convs],
+    ]);
   }
 
   async markConversationAsRead(conversationId: string, userId: string): Promise<void> {
@@ -670,8 +806,31 @@ export class LocalChatRepository implements IChatRepository {
       : Object.fromEntries(conversation.participantIds.map((id) => [id, 0]));
     unreadCounts[userId] = 0;
     conversation.unreadCountsByUser = unreadCounts;
+
+    const allMessages = getStorage<Record<string, ChatMessage[]>>(STORAGE_KEYS.MESSAGES, SEED_MESSAGES);
+    const messages = allMessages[conversationId] || [];
+    const updatedMessages: ChatMessage[] = messages.map((message): ChatMessage => {
+      // Older seed data may have a single status but no per-recipient receipt list.
+      const initialReadBy = message.readByUserIds ??
+        (message.status === 'read' ? [...conversation.participantIds] : [message.senderId]);
+      const readBy = new Set(initialReadBy);
+      readBy.add(userId);
+      const recipientIds = conversation.participantIds.filter((participantId) => participantId !== message.senderId);
+      const allRecipientsRead = recipientIds.length > 0 && recipientIds.every((participantId) => readBy.has(participantId));
+      const status: ChatMessage['status'] = allRecipientsRead ? 'read' : (message.status === 'read' ? 'sent' : message.status);
+      return { ...message, readByUserIds: Array.from(readBy), status };
+    });
+    allMessages[conversationId] = updatedMessages;
+    const lastMessage = conversation.lastMessage
+      ? updatedMessages.find((message) => message.id === conversation.lastMessage?.id)
+      : undefined;
+    if (lastMessage) conversation.lastMessage = lastMessage;
     convs[convIndex] = conversation;
-    setStorage(STORAGE_KEYS.CONVERSATIONS, convs);
+
+    setStorageBatch([
+      [STORAGE_KEYS.MESSAGES, allMessages],
+      [STORAGE_KEYS.CONVERSATIONS, convs],
+    ]);
   }
 
   async togglePinConversation(conversationId: string, userId: string, isPinned: boolean): Promise<void> {
@@ -708,10 +867,18 @@ export class LocalWallRepository implements IWallRepository {
     const posts = getStorage<PublicAnonymousWallPost[]>(STORAGE_KEYS.WALL_POSTS, SEED_WALL_POSTS);
     const userVotes = getStorage<Record<string, 'up' | 'down'>>(STORAGE_KEYS.USER_VOTES, {});
     if (userId) assertCurrentUser(userId, 'read personal Wall votes');
+    const blockedUserIds = userId ? getBlockedUserIds(userId) : new Set<string>();
+    const moderation = userId
+      ? getStorage<Record<string, PrivateWallModerationData>>(STORAGE_KEYS.WALL_MODERATION, {})
+      : {};
     const now = Date.now();
 
-    // Filter out expired posts
-    let activePosts = posts.filter((p) => p.expiresAt > now);
+    // Filter out expired posts and posts owned by accounts this user has blocked.
+    let activePosts = posts.filter((post) => {
+      if (post.expiresAt <= now) return false;
+      const ownerUserId = moderation[post.id]?.realOwnerUserId;
+      return !ownerUserId || !blockedUserIds.has(ownerUserId);
+    });
 
     if (wallPairId) {
       activePosts = activePosts.filter((p) => p.wallPairId === wallPairId);
@@ -733,10 +900,13 @@ export class LocalWallRepository implements IWallRepository {
 
   async getPostById(postId: string, userId?: string): Promise<PublicAnonymousWallPost | null> {
     const posts = getStorage<PublicAnonymousWallPost[]>(STORAGE_KEYS.WALL_POSTS, SEED_WALL_POSTS);
-    const post = posts.find((p) => p.id === postId);
+    const post = posts.find((p) => p.id === postId && p.expiresAt > Date.now());
     if (!post) return null;
     const userVotes = getStorage<Record<string, 'up' | 'down'>>(STORAGE_KEYS.USER_VOTES, {});
-    if (userId) assertCurrentUser(userId, 'read a personal Wall vote');
+    if (userId) {
+      assertCurrentUser(userId, 'read a personal Wall vote');
+      if (isContentOwnedByBlockedUser(userId, post.id)) return null;
+    }
     return { ...post, userVote: userId ? (userVotes[`${userId}_wall_post_${post.id}`] ?? null) : null };
   }
 
@@ -796,9 +966,11 @@ export class LocalWallRepository implements IWallRepository {
 
     userVotes[`${ownerUserId}_wall_post_${postId}`] = 'up';
     posts.unshift(newPost);
-    setStorage(STORAGE_KEYS.WALL_POSTS, posts);
-    setStorage(STORAGE_KEYS.WALL_MODERATION, moderation);
-    setStorage(STORAGE_KEYS.USER_VOTES, userVotes);
+    setStorageBatch([
+      [STORAGE_KEYS.WALL_POSTS, posts],
+      [STORAGE_KEYS.WALL_MODERATION, moderation],
+      [STORAGE_KEYS.USER_VOTES, userVotes],
+    ]);
 
     return { ...newPost, userVote: 'up' };
   }
@@ -810,8 +982,10 @@ export class LocalWallRepository implements IWallRepository {
 
     if (!users.some((user) => user.id === userId)) throw new Error('Unknown user cannot vote.');
     assertCurrentUser(userId, 'vote on a Wall post');
+    if (voteType !== 'up' && voteType !== 'down') throw new Error('Vote must be either up or down.');
     const postIndex = posts.findIndex((p) => p.id === postId && p.expiresAt > Date.now());
     if (postIndex === -1) throw new Error('Active Wall post not found');
+    assertContentNotBlocked(userId, postId);
 
     const post = posts[postIndex];
     const voteKey = `${userId}_wall_post_${postId}`;
@@ -835,16 +1009,30 @@ export class LocalWallRepository implements IWallRepository {
 
     delete post.userVote;
     posts[postIndex] = post;
-    setStorage(STORAGE_KEYS.WALL_POSTS, posts);
-    setStorage(STORAGE_KEYS.USER_VOTES, userVotes);
+    setStorageBatch([
+      [STORAGE_KEYS.WALL_POSTS, posts],
+      [STORAGE_KEYS.USER_VOTES, userVotes],
+    ]);
     return { ...post, userVote: userVotes[voteKey] ?? null };
   }
 
   async getReplies(postId: string, userId?: string): Promise<WallReply[]> {
-    if (userId) assertCurrentUser(userId, 'read personal Wall reply votes');
+    if (userId) {
+      assertCurrentUser(userId, 'read personal Wall reply votes');
+      assertContentNotBlocked(userId, postId);
+    }
+    const posts = getStorage<PublicAnonymousWallPost[]>(STORAGE_KEYS.WALL_POSTS, SEED_WALL_POSTS);
+    if (!posts.some((post) => post.id === postId && post.expiresAt > Date.now())) return [];
+    const moderation = userId
+      ? getStorage<Record<string, PrivateWallModerationData>>(STORAGE_KEYS.WALL_MODERATION, {})
+      : {};
+    const blockedUserIds = userId ? getBlockedUserIds(userId) : new Set<string>();
     const replies = getStorage<Record<string, WallReply[]>>(STORAGE_KEYS.WALL_REPLIES, SEED_WALL_REPLIES);
     const userVotes = getStorage<Record<string, 'up' | 'down'>>(STORAGE_KEYS.USER_VOTES, {});
-    return (replies[postId] || []).map((reply) => ({
+    return (replies[postId] || []).filter((reply) => {
+      const ownerUserId = moderation[reply.id]?.realOwnerUserId;
+      return !ownerUserId || !blockedUserIds.has(ownerUserId);
+    }).map((reply) => ({
       ...reply,
       userVote: userId ? (userVotes[`${userId}_wall_reply_${reply.id}`] ?? null) : null,
     }));
@@ -860,6 +1048,7 @@ export class LocalWallRepository implements IWallRepository {
     if (postIndex === -1) throw new Error('Active Wall post not found.');
     if (!users.some((user) => user.id === ownerUserId)) throw new Error('Unknown user cannot reply to a Wall post.');
     assertCurrentUser(ownerUserId, 'reply to a Wall post');
+    assertContentNotBlocked(ownerUserId, postId);
     if (!cleanContent || cleanContent.length > 500) throw new Error('Wall reply must contain 1–500 characters.');
 
     const identity = generateAnonymousIdentity();
@@ -887,14 +1076,13 @@ export class LocalWallRepository implements IWallRepository {
       createdAt: Date.now(),
     };
 
-    // Update post replyCount
-    if (postIndex !== -1) {
-      posts[postIndex].replyCount = (posts[postIndex].replyCount || 0) + 1;
-      setStorage(STORAGE_KEYS.WALL_POSTS, posts);
-    }
-
-    setStorage(STORAGE_KEYS.WALL_REPLIES, allReplies);
-    setStorage(STORAGE_KEYS.WALL_MODERATION, moderation);
+    // Update post replyCount; persist the public reply and private ownership record together.
+    posts[postIndex].replyCount = (posts[postIndex].replyCount || 0) + 1;
+    setStorageBatch([
+      [STORAGE_KEYS.WALL_POSTS, posts],
+      [STORAGE_KEYS.WALL_REPLIES, allReplies],
+      [STORAGE_KEYS.WALL_MODERATION, moderation],
+    ]);
     return newReply;
   }
 
@@ -905,8 +1093,11 @@ export class LocalWallRepository implements IWallRepository {
     const posts = getStorage<PublicAnonymousWallPost[]>(STORAGE_KEYS.WALL_POSTS, SEED_WALL_POSTS);
     if (!users.some((user) => user.id === userId)) throw new Error('Unknown user cannot vote.');
     assertCurrentUser(userId, 'vote on a Wall reply');
+    if (voteType !== 'up' && voteType !== 'down') throw new Error('Vote must be either up or down.');
     if (!posts.some((post) => post.id === postId && post.expiresAt > Date.now())) throw new Error('Active Wall post not found.');
 
+    assertContentNotBlocked(userId, postId);
+    assertContentNotBlocked(userId, replyId);
     const replies = allReplies[postId] || [];
     const repIndex = replies.findIndex((r) => r.id === replyId && r.postId === postId);
     if (repIndex === -1) throw new Error('Reply not found');
@@ -932,8 +1123,10 @@ export class LocalWallRepository implements IWallRepository {
     delete reply.userVote;
     replies[repIndex] = reply;
     allReplies[postId] = replies;
-    setStorage(STORAGE_KEYS.WALL_REPLIES, allReplies);
-    setStorage(STORAGE_KEYS.USER_VOTES, userVotes);
+    setStorageBatch([
+      [STORAGE_KEYS.WALL_REPLIES, allReplies],
+      [STORAGE_KEYS.USER_VOTES, userVotes],
+    ]);
     return { ...reply, userVote: userVotes[voteKey] ?? null };
   }
 }
@@ -943,12 +1136,18 @@ export class LocalWallRepository implements IWallRepository {
 // -------------------------------------------------------------
 export class LocalHubRepository implements IHubRepository {
   async getListings(filters?: {
-    category?: any;
-    region?: any;
+    category?: HubCategory;
+    region?: GhanaRegion;
     city?: string;
     searchQuery?: string;
+    userId?: string;
   }): Promise<HubListing[]> {
     let listings = getStorage<HubListing[]>(STORAGE_KEYS.HUB_LISTINGS, SEED_HUB_LISTINGS);
+    if (filters?.userId) {
+      assertCurrentUser(filters.userId, 'read Hub listings with personal block preferences');
+      const blockedUserIds = getBlockedUserIds(filters.userId);
+      listings = listings.filter((listing) => !blockedUserIds.has(listing.sellerId));
+    }
 
     if (filters?.category) {
       listings = listings.filter((l) => l.category === filters.category);
@@ -969,9 +1168,15 @@ export class LocalHubRepository implements IHubRepository {
     return listings.sort((a, b) => b.createdAt - a.createdAt);
   }
 
-  async getListingById(listingId: string): Promise<HubListing | null> {
+  async getListingById(listingId: string, userId?: string): Promise<HubListing | null> {
     const listings = getStorage<HubListing[]>(STORAGE_KEYS.HUB_LISTINGS, SEED_HUB_LISTINGS);
-    return listings.find((l) => l.id === listingId) || null;
+    const listing = listings.find((item) => item.id === listingId);
+    if (!listing) return null;
+    if (userId) {
+      assertCurrentUser(userId, 'read a Hub listing with personal block preferences');
+      if (getBlockedUserIds(userId).has(listing.sellerId)) return null;
+    }
+    return listing;
   }
 
   async createListing(
@@ -987,6 +1192,12 @@ export class LocalHubRepository implements IHubRepository {
       throw new Error('Listing title, description, and a valid non-negative price are required.');
     }
     if (!listing.city.trim()) throw new Error('Listing city is required.');
+    const allowedCategories: HubCategory[] = [
+      'Housing', 'Jobs', 'Marketplace', 'Services', 'Transport',
+      'Food', 'Education', 'Events', 'Football', 'Music',
+    ];
+    if (!allowedCategories.includes(listing.category)) throw new Error('Select a valid Hub listing category.');
+    if (!getAllRegions().includes(listing.region)) throw new Error('Select a valid Ghanaian region.');
     if (!listing.images.length || listing.images.length > 5 || listing.images.some((url) => !isSecureHttpsUrl(url))) {
       throw new Error('A listing requires one to five secure HTTPS image URLs.');
     }
@@ -1015,7 +1226,11 @@ export class LocalHubRepository implements IHubRepository {
 
     assertCurrentUser(userId, 'save a Hub listing');
     if (!accounts[userId]) throw new Error('Account info not found.');
-    if (!listings.some((listing) => listing.id === listingId)) throw new Error('Listing not found.');
+    const targetListing = listings.find((listing) => listing.id === listingId);
+    if (!targetListing) throw new Error('Listing not found.');
+    if (accounts[userId].blockedUserIds.includes(targetListing.sellerId)) {
+      throw new Error('You cannot save a listing from a user you blocked.');
+    }
     const userAccount = accounts[userId];
     const isSaved = userAccount.savedListingIds.includes(listingId);
 
@@ -1026,15 +1241,16 @@ export class LocalHubRepository implements IHubRepository {
     }
 
     const listingIdx = listings.findIndex((l) => l.id === listingId);
-    if (listingIdx !== -1) {
-      listings[listingIdx].savedCount = Math.max(
-        0,
-        listings[listingIdx].savedCount + (isSaved ? -1 : 1)
-      );
-      setStorage(STORAGE_KEYS.HUB_LISTINGS, listings);
-    }
+    if (listingIdx === -1) throw new Error('Listing not found.');
+    listings[listingIdx].savedCount = Math.max(
+      0,
+      listings[listingIdx].savedCount + (isSaved ? -1 : 1)
+    );
 
-    setStorage(STORAGE_KEYS.PRIVATE_ACCOUNTS, accounts);
+    setStorageBatch([
+      [STORAGE_KEYS.HUB_LISTINGS, listings],
+      [STORAGE_KEYS.PRIVATE_ACCOUNTS, accounts],
+    ]);
     return !isSaved;
   }
 
@@ -1043,7 +1259,8 @@ export class LocalHubRepository implements IHubRepository {
     const accounts = getStorage<Record<string, PrivateAccountInfo>>(STORAGE_KEYS.PRIVATE_ACCOUNTS, SEED_PRIVATE_ACCOUNTS);
     const listings = getStorage<HubListing[]>(STORAGE_KEYS.HUB_LISTINGS, SEED_HUB_LISTINGS);
     const savedIds = accounts[userId]?.savedListingIds || [];
-    return listings.filter((l) => savedIds.includes(l.id));
+    const blockedUserIds = getBlockedUserIds(userId);
+    return listings.filter((listing) => savedIds.includes(listing.id) && !blockedUserIds.has(listing.sellerId));
   }
 
   async incrementViews(listingId: string): Promise<void> {
@@ -1063,6 +1280,8 @@ export class LocalDiscoverRepository implements IDiscoverRepository {
   async getPosts(category?: DiscoverCategory, searchQuery?: string, userId?: string): Promise<DiscoverPost[]> {
     if (userId) assertCurrentUser(userId, 'read personal Discover state');
     let posts = getStorage<DiscoverPost[]>(STORAGE_KEYS.DISCOVER_POSTS, SEED_DISCOVER_POSTS);
+    const blockedUserIds = userId ? getBlockedUserIds(userId) : new Set<string>();
+    if (userId) posts = posts.filter((post) => !blockedUserIds.has(post.author.id));
 
     if (category && category !== 'Trending') {
       posts = posts.filter((p) => p.category === category);
@@ -1099,6 +1318,7 @@ export class LocalDiscoverRepository implements IDiscoverRepository {
     if (!post) return null;
     if (!userId) return post;
     assertCurrentUser(userId, 'read personal Discover state');
+    if (getBlockedUserIds(userId).has(post.author.id)) return null;
     const accounts = getStorage<Record<string, PrivateAccountInfo>>(STORAGE_KEYS.PRIVATE_ACCOUNTS, SEED_PRIVATE_ACCOUNTS);
     const likedByUserIds = post.likedByUserIds ?? (post.isLiked ? ['user_kwame'] : []);
     return {
@@ -1121,6 +1341,11 @@ export class LocalDiscoverRepository implements IDiscoverRepository {
     const author = users.find((u) => u.id === authorId);
     if (!author) throw new Error('Cannot create a post for an unknown user.');
     assertCurrentUser(authorId, 'publish a Discover post');
+    const allowedCategories: DiscoverCategory[] = [
+      'Trending', 'Ghana Now', 'Campus Life', 'Tech & Startups',
+      'Football', 'Entertainment', 'Business', 'Lifestyle',
+    ];
+    if (!allowedCategories.includes(category)) throw new Error('Select a valid Discover category.');
     const cleanContent = content.trim();
     if (!cleanContent || cleanContent.length > 5000) throw new Error('Post content must contain 1–5000 characters.');
     if (tags.length > 10 || tags.some((tag) => !tag.trim() || tag.trim().length > 40)) {
@@ -1157,6 +1382,9 @@ export class LocalDiscoverRepository implements IDiscoverRepository {
     if (index === -1) throw new Error('Post not found');
 
     const post = posts[index];
+    if (getBlockedUserIds(userId).has(post.author.id)) {
+      throw new Error('You cannot interact with a post from a user you blocked.');
+    }
     const likedByUserIds = new Set(post.likedByUserIds ?? (post.isLiked ? ['user_kwame'] : []));
     const wasLiked = likedByUserIds.has(userId);
     if (wasLiked) likedByUserIds.delete(userId);
@@ -1176,7 +1404,11 @@ export class LocalDiscoverRepository implements IDiscoverRepository {
 
     if (!accounts[userId]) return false;
     assertCurrentUser(userId, 'bookmark a Discover post');
-    if (!posts.some((post) => post.id === postId)) throw new Error('Post not found.');
+    const targetPost = posts.find((post) => post.id === postId);
+    if (!targetPost) throw new Error('Post not found.');
+    if (accounts[userId].blockedUserIds.includes(targetPost.author.id)) {
+      throw new Error('You cannot bookmark a post from a user you blocked.');
+    }
     const userAccount = accounts[userId];
     const isBookmarked = userAccount.savedPostIds.includes(postId);
 
@@ -1190,19 +1422,30 @@ export class LocalDiscoverRepository implements IDiscoverRepository {
     return !isBookmarked;
   }
 
-  async getComments(postId: string): Promise<DiscoverComment[]> {
+  async getComments(postId: string, userId?: string): Promise<DiscoverComment[]> {
     const allComments = getStorage<Record<string, DiscoverComment[]>>(STORAGE_KEYS.DISCOVER_COMMENTS, {});
-    return allComments[postId] || [];
+    const comments = allComments[postId] || [];
+    if (!userId) return comments;
+    assertCurrentUser(userId, 'read Discover comments');
+    const posts = getStorage<DiscoverPost[]>(STORAGE_KEYS.DISCOVER_POSTS, SEED_DISCOVER_POSTS);
+    const targetPost = posts.find((post) => post.id === postId);
+    if (!targetPost || getBlockedUserIds(userId).has(targetPost.author.id)) return [];
+    const blockedUserIds = getBlockedUserIds(userId);
+    return comments.filter((comment) => !blockedUserIds.has(comment.author.id));
   }
 
   async addComment(postId: string, authorId: string, content: string): Promise<DiscoverComment> {
     const allComments = getStorage<Record<string, DiscoverComment[]>>(STORAGE_KEYS.DISCOVER_COMMENTS, {});
     const posts = getStorage<DiscoverPost[]>(STORAGE_KEYS.DISCOVER_POSTS, SEED_DISCOVER_POSTS);
     const users = getStorage<UserProfile[]>(STORAGE_KEYS.USERS, SEED_USERS);
-    if (!posts.some((post) => post.id === postId)) throw new Error('Post not found.');
+    const targetPost = posts.find((post) => post.id === postId);
+    if (!targetPost) throw new Error('Post not found.');
     const author = users.find((u) => u.id === authorId);
     if (!author) throw new Error('Cannot add a comment for an unknown user.');
     assertCurrentUser(authorId, 'comment on a Discover post');
+    if (getBlockedUserIds(authorId).has(targetPost.author.id)) {
+      throw new Error('You cannot comment on a post from a user you blocked.');
+    }
     const cleanContent = content.trim();
     if (!cleanContent || cleanContent.length > 1000) throw new Error('Comment must contain 1–1000 characters.');
     const newComment: DiscoverComment = {
@@ -1219,12 +1462,13 @@ export class LocalDiscoverRepository implements IDiscoverRepository {
     allComments[postId] = postComments;
 
     const postIndex = posts.findIndex((p) => p.id === postId);
-    if (postIndex !== -1) {
-      posts[postIndex].commentsCount = (posts[postIndex].commentsCount || 0) + 1;
-      setStorage(STORAGE_KEYS.DISCOVER_POSTS, posts);
-    }
+    if (postIndex === -1) throw new Error('Post not found.');
 
-    setStorage(STORAGE_KEYS.DISCOVER_COMMENTS, allComments);
+    posts[postIndex].commentsCount = (posts[postIndex].commentsCount || 0) + 1;
+    setStorageBatch([
+      [STORAGE_KEYS.DISCOVER_POSTS, posts],
+      [STORAGE_KEYS.DISCOVER_COMMENTS, allComments],
+    ]);
     return newComment;
   }
 
@@ -1233,7 +1477,8 @@ export class LocalDiscoverRepository implements IDiscoverRepository {
     const accounts = getStorage<Record<string, PrivateAccountInfo>>(STORAGE_KEYS.PRIVATE_ACCOUNTS, SEED_PRIVATE_ACCOUNTS);
     const posts = getStorage<DiscoverPost[]>(STORAGE_KEYS.DISCOVER_POSTS, SEED_DISCOVER_POSTS);
     const savedIds = accounts[userId]?.savedPostIds || [];
-    return posts.filter((post) => savedIds.includes(post.id)).map((post) => {
+    const blockedUserIds = getBlockedUserIds(userId);
+    return posts.filter((post) => savedIds.includes(post.id) && !blockedUserIds.has(post.author.id)).map((post) => {
       const likedByUserIds = post.likedByUserIds ?? (post.isLiked ? ['user_kwame'] : []);
       return { ...post, likedByUserIds, isLiked: likedByUserIds.includes(userId), isBookmarked: true };
     });
@@ -1251,8 +1496,9 @@ export class LocalCallRepository implements ICallRepository {
   }
 
   async addCallRecord(record: Omit<CallRecord, 'id'>): Promise<CallRecord> {
+    const sessionMarker = getStorage<string | null>(STORAGE_KEYS.SESSION_MARKER, null);
     const currentUserId = getStorage<string | null>(STORAGE_KEYS.CURRENT_USER_ID, null);
-    if (!currentUserId || record.ownerUserId !== currentUserId) {
+    if (sessionMarker !== 'explicit' || !currentUserId || record.ownerUserId !== currentUserId) {
       throw new Error('Call history can only be written for the signed-in user.');
     }
     const users = getStorage<UserProfile[]>(STORAGE_KEYS.USERS, SEED_USERS);
@@ -1288,19 +1534,20 @@ export class LocalSafetyRepository implements ISafetyRepository {
     const targetId = report.targetId.trim();
     const targetSummary = report.targetSummary.trim();
     const details = report.details?.trim();
+    const allowedTargetTypes: ReportRequest['targetType'][] = ['user', 'message', 'wall_post', 'wall_reply', 'hub_listing', 'discover_post'];
     const allowedReasons = ['Spam', 'Harassment', 'Scam', 'Hate/abuse', 'Sexual content', 'Violence', 'Illegal activity', 'Other'];
-    const allowedTargetTypes = ['user', 'message', 'wall_post', 'wall_reply', 'hub_listing', 'discover_post'];
     if (!allowedTargetTypes.includes(report.targetType)) throw new Error('Select a valid report target type.');
     if (!targetId || targetId.length > 200) throw new Error('A valid report target is required.');
     if (!targetSummary || targetSummary.length > 240) throw new Error('Report summary must contain 1–240 characters.');
     if (!allowedReasons.includes(report.reason)) throw new Error('Select a valid report reason.');
     if (details && details.length > 2000) throw new Error('Report details cannot exceed 2000 characters.');
-    if (report.targetType === 'user' && report.targetId === report.reporterUserId) {
+    if (report.targetType === 'user' && targetId === report.reporterUserId) {
       throw new Error('You cannot report your own account.');
     }
 
     const users = getStorage<UserProfile[]>(STORAGE_KEYS.USERS, SEED_USERS);
     const messages = getStorage<Record<string, ChatMessage[]>>(STORAGE_KEYS.MESSAGES, SEED_MESSAGES);
+    const conversations = getStorage<Conversation[]>(STORAGE_KEYS.CONVERSATIONS, SEED_CONVERSATIONS);
     const wallPosts = getStorage<PublicAnonymousWallPost[]>(STORAGE_KEYS.WALL_POSTS, SEED_WALL_POSTS);
     const wallReplies = getStorage<Record<string, WallReply[]>>(STORAGE_KEYS.WALL_REPLIES, SEED_WALL_REPLIES);
     const listings = getStorage<HubListing[]>(STORAGE_KEYS.HUB_LISTINGS, SEED_HUB_LISTINGS);
@@ -1308,7 +1555,12 @@ export class LocalSafetyRepository implements ISafetyRepository {
     const targetExists = report.targetType === 'user'
       ? users.some((user) => user.id === targetId)
       : report.targetType === 'message'
-        ? Object.values(messages).some((items) => items.some((message) => message.id === targetId))
+        ? Object.entries(messages).some(([conversationId, items]) =>
+            items.some((message) => message.id === targetId) &&
+            conversations.some((conversation) =>
+              conversation.id === conversationId && conversation.participantIds.includes(report.reporterUserId)
+            )
+          )
         : report.targetType === 'wall_post'
           ? wallPosts.some((post) => post.id === targetId)
           : report.targetType === 'wall_reply'

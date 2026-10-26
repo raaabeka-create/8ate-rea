@@ -221,6 +221,11 @@ export const AppLayout: React.FC = () => {
           setActiveTab(tab);
           refreshUnreadCounters();
         }}
+        onOpenConversation={(conversationId) => {
+          setSelectedConversationId(conversationId);
+          setActiveTab('CHATS');
+          refreshUnreadCounters();
+        }}
       />
 
       {/* Active VoIP / WebRTC Simulated Call Modal */}

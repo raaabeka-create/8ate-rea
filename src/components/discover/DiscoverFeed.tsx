@@ -13,6 +13,7 @@ import { discoverService } from '../../services';
 import { useAuth } from '../../context/AuthContext';
 import { CreatePostModal } from './CreatePostModal';
 import { DiscoverDetailModal } from './DiscoverDetailModal';
+import { subscribeToBlocklistChanges } from '../../utils/safetyEvents';
 
 interface DiscoverFeedProps {
   onStartDirectChat: (user: UserProfile) => void;
@@ -59,6 +60,7 @@ export const DiscoverFeed: React.FC<DiscoverFeedProps> = ({ onStartDirectChat })
 
   useEffect(() => {
     loadPosts();
+    return subscribeToBlocklistChanges(() => { void loadPosts(); });
   }, [selectedCategory, user?.id]);
 
   const handleToggleLike = async (e: React.MouseEvent, post: DiscoverPost) => {

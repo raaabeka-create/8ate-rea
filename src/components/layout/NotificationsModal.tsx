@@ -8,12 +8,14 @@ interface NotificationsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onNavigateToTab: (tabName: 'CHATS' | 'WALLS' | 'HUBS' | 'DISCOVER') => void;
+  onOpenConversation: (conversationId: string) => void;
 }
 
 export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   isOpen,
   onClose,
   onNavigateToTab,
+  onOpenConversation,
 }) => {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -67,6 +69,18 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     }
     onClose();
     if (notif.type === 'new_message') {
+      const prefix = '/chats/';
+      if (notif.targetUrl?.startsWith(prefix)) {
+        try {
+          const conversationId = decodeURIComponent(notif.targetUrl.slice(prefix.length));
+          if (conversationId) {
+            onOpenConversation(conversationId);
+            return;
+          }
+        } catch (error) {
+          console.error('Invalid conversation target in local notification', error);
+        }
+      }
       onNavigateToTab('CHATS');
     } else if (notif.type === 'wall_reply' || notif.type === 'wall_upvote') {
       onNavigateToTab('WALLS');
