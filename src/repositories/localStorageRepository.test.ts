@@ -249,6 +249,16 @@ describe('prototype repository guardrails', () => {
       .rejects.toThrow('User to block was not found.');
 
     await safety.unblockUser('user_kwame', 'user_ama');
+    await signInAs('user_ama');
+    await safety.blockUser('user_ama', 'user_kwame');
+    await signInAs('user_kwame');
+    await expect(chats.sendMessage('conv_kwame_ama', 'user_kwame', 'This should also be blocked'))
+      .rejects.toThrow('Message not sent because one participant has blocked the other.');
+    await expect(chats.createConversation(['user_kwame', 'user_ama'], false))
+      .rejects.toThrow('This direct chat is unavailable because one participant has blocked the other.');
+    await signInAs('user_ama');
+    await safety.unblockUser('user_ama', 'user_kwame');
+    await signInAs('user_kwame');
     await chats.sendMessage('conv_kwame_ama', 'user_kwame', 'This should now work');
   });
 
