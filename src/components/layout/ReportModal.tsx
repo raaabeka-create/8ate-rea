@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ShieldAlert, X, Check } from 'lucide-react';
 import { useReport } from '../../context/ReportContext';
 import { useAuth } from '../../context/AuthContext';
 import { ReportReason } from '../../types';
+import { safetyService } from '../../services';
 
 export const ReportModal: React.FC = () => {
   const { reportTarget, closeReport, submitReport } = useReport();
@@ -12,6 +13,20 @@ export const ReportModal: React.FC = () => {
   const [details, setDetails] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [blockError, setBlockError] = useState<string | null>(null);
+  const [blocking, setBlocking] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+
+  useEffect(() => {
+    setReason('Spam');
+    setDetails('');
+    setSubmitted(false);
+    setReportError(null);
+    setBlockError(null);
+    setBlocking(false);
+    setBlocked(false);
+  }, [reportTarget?.id]);
 
   if (!reportTarget) return null;
 
@@ -29,6 +44,7 @@ export const ReportModal: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    setReportError(null);
     try {
       setSubmitting(true);
       await submitReport(user.id, reason, details);
@@ -39,8 +55,26 @@ export const ReportModal: React.FC = () => {
       }, 1800);
     } catch (err) {
       console.error('Report submission failed', err);
+      setReportError(err instanceof Error ? err.message : 'The report could not be saved.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleBlockUser = async () => {
+    if (!user || reportTarget.type !== 'user' || reportTarget.id === user.id) return;
+    const confirmed = window.confirm(`Block ${reportTarget.summary}? They will not be able to start or continue a direct chat with you in this demo.`);
+    if (!confirmed) return;
+    setBlockError(null);
+    setBlocking(true);
+    try {
+      await safetyService.blockUser(user.id, reportTarget.id);
+      setBlocked(true);
+    } catch (err) {
+      console.error('Block user failed', err);
+      setBlockError(err instanceof Error ? err.message : 'This user could not be blocked.');
+    } finally {
+      setBlocking(false);
     }
   };
 
@@ -68,15 +102,25 @@ export const ReportModal: React.FC = () => {
             </div>
             <h3 className="text-base font-bold text-gray-900">Report Submitted</h3>
             <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-              Thank you for keeping 8ATE safe for all Ghanaian communities. Our moderation system will review this report.
+              Demo report saved locally. No moderation team receives this report in the prototype.
             </p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="p-4 space-y-4">
+            {reportError && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">{reportError}</div>}
             <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs">
               <span className="font-bold text-gray-700 uppercase tracking-wider block mb-0.5">Target</span>
               <p className="text-gray-900 font-medium truncate">{reportTarget.summary}</p>
             </div>
+            {reportTarget.type === 'user' && reportTarget.id !== user?.id && (
+              <div className="mt-3">
+                <button type="button" onClick={handleBlockUser} disabled={blocking || blocked} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-60">
+                  {blocking ? 'Blocking…' : blocked ? 'User blocked' : 'Block this user'}
+                </button>
+                {blockError && <p role="alert" className="mt-1 text-[11px] text-red-700">{blockError}</p>}
+                {blocked && <p className="mt-1 text-[11px] text-green-700">Direct messaging is now blocked in this demo.</p>}
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">
