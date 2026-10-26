@@ -46,7 +46,7 @@ class MemoryStorage implements Storage {
 class FailingNotificationRepository extends LocalNotificationRepository {
   override async addNotification(
     _notification: Parameters<LocalNotificationRepository['addNotification']>[0]
-  ) {
+  ): Promise<Awaited<ReturnType<LocalNotificationRepository['addNotification']>>> {
     throw new Error('forced notification storage failure');
   }
 }
