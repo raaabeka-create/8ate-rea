@@ -317,8 +317,8 @@ export class LocalChatRepository implements IChatRepository {
     if (!currentUserId || !uniqueParticipantIds.includes(currentUserId)) {
       throw new Error('The active demo user must be included in a conversation.');
     }
-    if (uniqueParticipantIds.length < 2) {
-      throw new Error('A conversation requires at least two distinct participants.');
+    if (uniqueParticipantIds.length < 2 || (!isGroup && uniqueParticipantIds.length !== 2)) {
+      throw new Error('A conversation requires exactly two distinct participants unless it is a group.');
     }
     if (uniqueParticipantIds.some((id) => !users.some((user) => user.id === id))) {
       throw new Error('A conversation contains an unknown participant.');
@@ -341,7 +341,7 @@ export class LocalChatRepository implements IChatRepository {
     const newConv: Conversation = {
       id: `conv_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       isGroup,
-      name: name || (isGroup ? 'Group Conversation' : undefined),
+      name: isGroup ? name!.trim() : undefined,
       avatarUrl: isGroup
         ? 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=200&auto=format&fit=crop&q=80'
         : undefined,
@@ -438,6 +438,7 @@ export class LocalChatRepository implements IChatRepository {
     if (msgIndex === -1) throw new Error('Message not found');
 
     const msg = messages[msgIndex];
+    if (msg.deletedForEveryone) throw new Error('Deleted messages cannot be reacted to.');
     const existingIdx = msg.reactions.findIndex((r) => r.userId === userId && r.emoji === emoji);
 
     if (existingIdx !== -1) {
@@ -501,12 +502,17 @@ export class LocalChatRepository implements IChatRepository {
   }
 
   async togglePinConversation(conversationId: string, isPinned: boolean): Promise<void> {
+    const currentUserId = getStorage<string | null>(STORAGE_KEYS.CURRENT_USER_ID, null);
     const convs = getStorage<Conversation[]>(STORAGE_KEYS.CONVERSATIONS, SEED_CONVERSATIONS);
     const convIndex = convs.findIndex((c) => c.id === conversationId);
-    if (convIndex !== -1) {
-      convs[convIndex].isPinned = isPinned;
-      setStorage(STORAGE_KEYS.CONVERSATIONS, convs);
+    if (!currentUserId || convIndex === -1 || !convs[convIndex].participantIds.includes(currentUserId)) {
+      throw new Error('Only a conversation member using the active demo session can pin it.');
     }
+
+    // The prototype stores this flag on the conversation, so it is shared by all members.
+    // Production pin state must be stored per user.
+    convs[convIndex].isPinned = isPinned;
+    setStorage(STORAGE_KEYS.CONVERSATIONS, convs);
   }
 }
 
