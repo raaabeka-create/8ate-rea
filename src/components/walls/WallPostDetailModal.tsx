@@ -31,15 +31,18 @@ export const WallPostDetailModal: React.FC<WallPostDetailModalProps> = ({
   const [newReplyText, setNewReplyText] = useState('');
   const [loadingReplies, setLoadingReplies] = useState(true);
   const [submittingReply, setSubmittingReply] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const fetchReplies = async () => {
     if (!post || !user) return;
     try {
       setLoadingReplies(true);
+      setDetailError(null);
       const data = await wallService.getReplies(post.id, user.id);
       setReplies(data);
     } catch (err) {
       console.error('Failed to load replies', err);
+      setDetailError(err instanceof Error ? err.message : 'Could not load replies.');
     } finally {
       setLoadingReplies(false);
     }
@@ -67,6 +70,7 @@ export const WallPostDetailModal: React.FC<WallPostDetailModalProps> = ({
       onPostUpdated(updated);
     } catch (err) {
       console.error('Vote failed', err);
+      setDetailError(err instanceof Error ? err.message : 'Your vote could not be saved.');
     }
   };
 
@@ -76,6 +80,7 @@ export const WallPostDetailModal: React.FC<WallPostDetailModalProps> = ({
       await fetchReplies();
     } catch (err) {
       console.error('Reply vote failed', err);
+      setDetailError(err instanceof Error ? err.message : 'Your reply vote could not be saved.');
     }
   };
 
@@ -85,6 +90,7 @@ export const WallPostDetailModal: React.FC<WallPostDetailModalProps> = ({
 
     try {
       setSubmittingReply(true);
+      setDetailError(null);
       await wallService.createReply(post.id, newReplyText.trim(), user.id);
       setNewReplyText('');
       await fetchReplies();
@@ -93,6 +99,7 @@ export const WallPostDetailModal: React.FC<WallPostDetailModalProps> = ({
       if (updated) onPostUpdated(updated);
     } catch (err) {
       console.error('Failed to reply', err);
+      setDetailError(err instanceof Error ? err.message : 'Your reply could not be saved.');
     } finally {
       setSubmittingReply(false);
     }
@@ -126,6 +133,8 @@ export const WallPostDetailModal: React.FC<WallPostDetailModalProps> = ({
             </button>
           </div>
         </div>
+
+        {detailError && <div role="alert" className="mx-3 mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">{detailError}</div>}
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
