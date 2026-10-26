@@ -33,15 +33,18 @@ export const DiscoverDetailModal: React.FC<DiscoverDetailModalProps> = ({
   const [commentText, setCommentText] = useState('');
   const [loadingComments, setLoadingComments] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const fetchComments = async () => {
     if (!post) return;
     try {
       setLoadingComments(true);
+      setDetailError(null);
       const data = await discoverService.getComments(post.id);
       setComments(data);
     } catch (err) {
       console.error('Error fetching comments', err);
+      setDetailError(err instanceof Error ? err.message : 'Could not load comments.');
     } finally {
       setLoadingComments(false);
     }
@@ -61,15 +64,17 @@ export const DiscoverDetailModal: React.FC<DiscoverDetailModalProps> = ({
       onPostUpdated(updated);
     } catch (err) {
       console.error('Like failed', err);
+      setDetailError(err instanceof Error ? err.message : 'Your like could not be saved.');
     }
   };
 
   const handleToggleBookmark = async () => {
     try {
-      const updated = await discoverService.toggleBookmark(post.id, user.id);
-      onPostUpdated(updated);
+      const isBookmarked = await discoverService.toggleBookmark(post.id, user.id);
+      onPostUpdated({ ...post, isBookmarked });
     } catch (err) {
       console.error('Bookmark failed', err);
+      setDetailError(err instanceof Error ? err.message : 'Your bookmark could not be saved.');
     }
   };
 
@@ -79,13 +84,15 @@ export const DiscoverDetailModal: React.FC<DiscoverDetailModalProps> = ({
 
     try {
       setSubmitting(true);
-      await discoverService.addComment(post.id, user, commentText.trim());
+      setDetailError(null);
+      await discoverService.addComment(post.id, user.id, commentText.trim());
       setCommentText('');
       await fetchComments();
-      const updated = await discoverService.getPostById(post.id);
+      const updated = await discoverService.getPostById(post.id, user.id);
       if (updated) onPostUpdated(updated);
     } catch (err) {
       console.error('Failed to post comment', err);
+      setDetailError(err instanceof Error ? err.message : 'Your comment could not be saved.');
     } finally {
       setSubmitting(false);
     }
@@ -107,7 +114,7 @@ export const DiscoverDetailModal: React.FC<DiscoverDetailModalProps> = ({
               <div className="flex items-center gap-1 font-bold text-xs text-gray-900">
                 <span>{post.author.displayName}</span>
                 {post.author.verified && (
-                  <span className="text-[10px] text-purple-600">✓</span>
+                  <span className="text-[9px] text-purple-600 font-semibold" title="Demo profile flag; not identity verified">Demo</span>
                 )}
               </div>
               <div className="text-[11px] text-purple-700 font-medium">
@@ -129,6 +136,8 @@ export const DiscoverDetailModal: React.FC<DiscoverDetailModalProps> = ({
           </div>
         </div>
 
+        {detailError && <div role="alert" className="mx-3 mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">{detailError}</div>}
+
         {/* Scrollable Post & Comments */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {/* Category badge */}
@@ -142,10 +151,10 @@ export const DiscoverDetailModal: React.FC<DiscoverDetailModalProps> = ({
           </p>
 
           {/* Photo Media */}
-          {post.mediaUrls && post.mediaUrls.length > 0 && (
+          {post.imageUrl && (
             <div className="rounded-xl overflow-hidden border border-gray-200">
               <img
-                src={post.mediaUrls[0]}
+                src={post.imageUrl}
                 alt="Post Media"
                 referrerPolicy="no-referrer"
                 className="w-full max-h-72 object-cover"

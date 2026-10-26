@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Pin, MessageSquarePlus, Users, Check, CheckCheck } from 'lucide-react';
+import { Search, Pin, MessageSquarePlus, Users, Check } from 'lucide-react';
 import { Conversation, UserProfile } from '../../types';
 import { chatService } from '../../services';
 import { useAuth } from '../../context/AuthContext';
@@ -19,6 +19,7 @@ export const ChatList: React.FC<ChatListProps> = ({
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const loadConversations = async () => {
     if (!user) return;
@@ -28,6 +29,7 @@ export const ChatList: React.FC<ChatListProps> = ({
       setConversations(data);
     } catch (err) {
       console.error('Error loading conversations', err);
+      setActionError('Could not load your conversations. Check browser storage and retry.');
     } finally {
       setLoading(false);
     }
@@ -37,32 +39,49 @@ export const ChatList: React.FC<ChatListProps> = ({
     loadConversations();
   }, [user]);
 
-  const handleSelectDirectUser = async (targetUser: UserProfile) => {
-    if (!user) return;
+  const handleSelectDirectUser = async (targetUser: UserProfile): Promise<string | null> => {
+    if (!user) return 'Sign in to start a conversation.';
+    setActionError(null);
     try {
       const conv = await chatService.startDirectChat(user.id, targetUser.id);
       await loadConversations();
       onSelectConversation(conv.id);
+      return null;
     } catch (err) {
       console.error('Error starting direct chat', err);
+      const message = err instanceof Error ? err.message : 'Could not start this conversation.';
+      setActionError(message);
+      return message;
     }
   };
 
-  const handleCreateGroup = async (memberIds: string[], groupName: string) => {
-    if (!user) return;
+  const handleCreateGroup = async (memberIds: string[], groupName: string): Promise<string | null> => {
+    if (!user) return 'Sign in to create a group.';
+    setActionError(null);
     try {
       const conv = await chatService.createGroupChat(user.id, memberIds, groupName);
       await loadConversations();
       onSelectConversation(conv.id);
+      return null;
     } catch (err) {
       console.error('Error creating group chat', err);
+      const message = err instanceof Error ? err.message : 'Could not create this group.';
+      setActionError(message);
+      return message;
     }
   };
 
   const handleTogglePin = async (e: React.MouseEvent, conv: Conversation) => {
     e.stopPropagation();
-    await chatService.togglePin(conv.id, !conv.isPinned);
-    await loadConversations();
+    if (!user) return;
+    setActionError(null);
+    try {
+      await chatService.togglePin(conv.id, user.id, !conv.isPinned);
+      await loadConversations();
+    } catch (err) {
+      console.error('Error updating conversation pin', err);
+      setActionError(err instanceof Error ? err.message : 'Could not update this chat.');
+    }
   };
 
   const filteredConversations = conversations.filter((c) => {
@@ -127,6 +146,12 @@ export const ChatList: React.FC<ChatListProps> = ({
         </div>
       </div>
 
+      {actionError && (
+        <div role="alert" className="mx-3 mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">
+          {actionError}
+        </div>
+      )}
+
       {/* Conversations List */}
       <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
         {loading ? (
@@ -189,7 +214,7 @@ export const ChatList: React.FC<ChatListProps> = ({
                   <div className="flex items-center justify-between gap-1">
                     <p className="text-xs text-gray-500 truncate flex items-center gap-1 font-normal">
                       {conv.lastMessage?.senderId === user?.id && (
-                        <CheckCheck className="w-3.5 h-3.5 text-purple-600 shrink-0 inline" />
+                        <Check className="w-3.5 h-3.5 text-purple-600 shrink-0 inline" aria-label="Demo status only; no recipient receipt" />
                       )}
                       <span>
                         {conv.lastMessage

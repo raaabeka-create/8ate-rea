@@ -244,6 +244,8 @@ export const SEED_CONVERSATIONS: Conversation[] = [
     participants: [SEED_USERS[0], SEED_USERS[1]],
     lastMessage: SEED_MESSAGES.conv_kwame_ama[3],
     unreadCount: 0,
+    unreadCountsByUser: { user_kwame: 0, user_ama: 0 },
+    pinnedByUserIds: ['user_kwame'],
     isPinned: true,
     updatedAt: Date.now() - 1800000,
     createdAt: Date.now() - 60 * 86400000,
@@ -257,6 +259,8 @@ export const SEED_CONVERSATIONS: Conversation[] = [
     participants: SEED_USERS,
     lastMessage: SEED_MESSAGES.conv_ghana_builders[2],
     unreadCount: 2,
+    unreadCountsByUser: { user_kwame: 2, user_ama: 0, user_kofi: 0, user_afia: 0, user_yaw: 0, user_akosua: 0 },
+    pinnedByUserIds: ['user_kwame'],
     isPinned: true,
     updatedAt: Date.now() - 1800000,
     createdAt: Date.now() - 30 * 86400000,
@@ -268,6 +272,8 @@ export const SEED_CONVERSATIONS: Conversation[] = [
     participants: [SEED_USERS[0], SEED_USERS[2]],
     lastMessage: SEED_MESSAGES.conv_kwame_kofi[1],
     unreadCount: 0,
+    unreadCountsByUser: { user_kwame: 0, user_kofi: 0 },
+    pinnedByUserIds: [],
     isPinned: false,
     updatedAt: Date.now() - 72000000,
     createdAt: Date.now() - 40 * 86400000,
@@ -708,6 +714,7 @@ export const SEED_DISCOVER_POSTS: DiscoverPost[] = [
 export const SEED_CALL_RECORDS: CallRecord[] = [
   {
     id: 'call_1',
+    ownerUserId: 'user_kwame',
     otherUser: SEED_USERS[1], // Ama Serwaa
     type: 'voice',
     direction: 'incoming',
@@ -717,6 +724,7 @@ export const SEED_CALL_RECORDS: CallRecord[] = [
   },
   {
     id: 'call_2',
+    ownerUserId: 'user_kwame',
     otherUser: SEED_USERS[2], // Kofi Boateng
     type: 'video',
     direction: 'outgoing',
@@ -726,6 +734,7 @@ export const SEED_CALL_RECORDS: CallRecord[] = [
   },
   {
     id: 'call_3',
+    ownerUserId: 'user_kwame',
     otherUser: SEED_USERS[3], // Afia Osei
     type: 'voice',
     direction: 'missed',
@@ -735,6 +744,7 @@ export const SEED_CALL_RECORDS: CallRecord[] = [
   },
   {
     id: 'call_4',
+    ownerUserId: 'user_kwame',
     otherUser: SEED_USERS[4], // Yaw Addo
     type: 'voice',
     direction: 'outgoing',

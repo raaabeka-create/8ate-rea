@@ -38,7 +38,7 @@ export const ReportProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       reason,
       details,
     });
-    closeReport();
+    // The modal owns its success state and closes itself after showing confirmation.
   };
 
   return (

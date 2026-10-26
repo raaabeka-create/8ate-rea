@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, MapPin, Tag, MessageSquare, ShieldAlert, CheckCircle2, Bookmark } from 'lucide-react';
+import { X, MapPin, Tag, MessageSquare, ShieldAlert, Bookmark } from 'lucide-react';
 import { HubListing, UserProfile } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { useReport } from '../../context/ReportContext';
@@ -117,7 +117,6 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
               <div>
                 <div className="text-xs font-extrabold text-gray-900 flex items-center gap-1">
                   <span>{listing.seller.displayName}</span>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-purple-600" />
                 </div>
                 <div className="text-[11px] text-purple-700 font-medium">
                   @{listing.seller.username} • {listing.seller.city}
@@ -140,8 +139,8 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
                     avatarUrl: listing.seller.avatarUrl,
                     region: listing.seller.region,
                     city: listing.seller.city,
-                    phoneNumber: '',
-                    createdAt: Date.now(),
+                    bio: '',
+                    joinedAt: Date.now(),
                   },
                   listing.title
                 );

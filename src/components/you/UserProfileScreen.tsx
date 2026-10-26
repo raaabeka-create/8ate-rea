@@ -21,13 +21,14 @@ import { hubService, discoverService, safetyService } from '../../services';
 import { GHANA_REGIONS, getCitiesByRegion } from '../../data/ghanaData';
 
 export const UserProfileScreen: React.FC = () => {
-  const { user, allUsers, switchUser, logout, updateUserProfile } = useAuth();
+  const { user, privateInfo, allUsers, switchUser, logout, updateProfile, refreshUser } = useAuth();
   const [activeSubTab, setActiveSubTab] = useState<'saved' | 'my_listings' | 'switcher' | 'safety'>('saved');
   const [savedHubs, setSavedHubs] = useState<HubListing[]>([]);
   const [savedPosts, setSavedPosts] = useState<DiscoverPost[]>([]);
   const [myListings, setMyListings] = useState<HubListing[]>([]);
   const [blockedUsers, setBlockedUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   // Edit profile state
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -53,6 +54,7 @@ export const UserProfileScreen: React.FC = () => {
       setBlockedUsers(blocked);
     } catch (err) {
       console.error('Failed to load profile data', err);
+      setProfileError('Some profile data could not be loaded. Check browser storage and retry.');
     } finally {
       setLoading(false);
     }
@@ -78,8 +80,9 @@ export const UserProfileScreen: React.FC = () => {
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    setProfileError(null);
     try {
-      await updateUserProfile({
+      await updateProfile({
         displayName: editDisplayName,
         bio: editBio,
         region: editRegion,
@@ -88,12 +91,20 @@ export const UserProfileScreen: React.FC = () => {
       setIsEditingProfile(false);
     } catch (err) {
       console.error('Update profile error', err);
+      setProfileError(err instanceof Error ? err.message : 'Profile could not be saved.');
     }
   };
 
   const handleUnblock = async (blockedUserId: string) => {
-    await safetyService.unblockUser(user.id, blockedUserId);
-    await loadData();
+    setProfileError(null);
+    try {
+      await safetyService.unblockUser(user.id, blockedUserId);
+      await refreshUser();
+      await loadData();
+    } catch (err) {
+      console.error('Unblock user error', err);
+      setProfileError(err instanceof Error ? err.message : 'Could not unblock this user.');
+    }
   };
 
   const maskPhone = (phone: string) => {
@@ -103,6 +114,11 @@ export const UserProfileScreen: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-[#FAF9FC] pb-24 relative overflow-y-auto">
+      {profileError && (
+        <div role="alert" className="mx-4 mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">
+          {profileError}
+        </div>
+      )}
       {/* Profile Header Card */}
       <div className="max-w-2xl mx-auto w-full p-4">
         <div className="bg-white rounded-3xl p-6 border border-purple-100 shadow-xs relative overflow-hidden">
@@ -120,7 +136,7 @@ export const UserProfileScreen: React.FC = () => {
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5 mb-0.5">
                 <h2 className="text-lg font-extrabold text-gray-900">{user.displayName}</h2>
                 {user.verified && (
-                  <CheckCircle2 className="w-4 h-4 text-purple-600" />
+                  <span className="text-[9px] text-purple-600 font-semibold" title="Demo profile flag; not identity verified">Demo badge</span>
                 )}
               </div>
 
@@ -139,12 +155,14 @@ export const UserProfileScreen: React.FC = () => {
                 </p>
               )}
 
-              {/* Private phone pill */}
-              <div className="mt-3 inline-flex items-center gap-1.5 bg-purple-50 px-3 py-1 rounded-xl text-[11px] font-semibold text-purple-900 border border-purple-100">
-                <Lock className="w-3 h-3 text-purple-700" />
-                <span>Phone: {maskPhone(user.phoneNumber)}</span>
-                <span className="text-purple-500 text-[10px] font-normal">(Private)</span>
-              </div>
+              {/* Phone data is read from the private account record, never the public profile. */}
+              {privateInfo?.phoneNumber && (
+                <div className="mt-3 inline-flex items-center gap-1.5 bg-purple-50 px-3 py-1 rounded-xl text-[11px] font-semibold text-purple-900 border border-purple-100">
+                  <Lock className="w-3 h-3 text-purple-700" />
+                  <span>Phone: {maskPhone(privateInfo.phoneNumber)}</span>
+                  <span className="text-purple-500 text-[10px] font-normal">(Private)</span>
+                </div>
+              )}
             </div>
 
             {/* Edit button */}
@@ -302,7 +320,7 @@ export const UserProfileScreen: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-gray-500">
-              Instantly switch profiles to test real-time chat replies, anonymous regional wall voting, and marketplace inquiries:
+              Switch fictional demo profiles to test simulated chat replies, anonymous Wall voting, and marketplace inquiries:
             </p>
             <div className="space-y-2">
               {allUsers.map((u) => (

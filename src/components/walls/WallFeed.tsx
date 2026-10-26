@@ -21,21 +21,27 @@ export const WallFeed: React.FC = () => {
   const [selectedPairId, setSelectedPairId] = useState<string>('ALL');
   const [posts, setPosts] = useState<PublicAnonymousWallPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [wallError, setWallError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [activePostDetail, setActivePostDetail] = useState<PublicAnonymousWallPost | null>(null);
 
   const loadWallsData = async () => {
     try {
       setLoading(true);
+      setWallError(null);
       const pairs = await wallService.getWallPairs();
       setWallPairs(pairs);
 
       const activePosts = await wallService.getActivePosts(
-        selectedPairId === 'ALL' ? undefined : selectedPairId
+        selectedPairId === 'ALL' ? undefined : selectedPairId,
+        undefined,
+        undefined,
+        user?.id
       );
       setPosts(activePosts);
     } catch (err) {
       console.error('Error loading wall feed', err);
+      setWallError(err instanceof Error ? err.message : 'Could not load the Wall feed.');
     } finally {
       setLoading(false);
     }
@@ -43,7 +49,7 @@ export const WallFeed: React.FC = () => {
 
   useEffect(() => {
     loadWallsData();
-  }, [selectedPairId]);
+  }, [selectedPairId, user?.id]);
 
   const handleVote = async (e: React.MouseEvent, post: PublicAnonymousWallPost, type: 'up' | 'down') => {
     e.stopPropagation();
@@ -53,6 +59,7 @@ export const WallFeed: React.FC = () => {
       setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     } catch (err) {
       console.error('Vote failed', err);
+      setWallError(err instanceof Error ? err.message : 'Your vote could not be saved.');
     }
   };
 
@@ -66,6 +73,7 @@ export const WallFeed: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-[#FAF9FC] pb-24 relative">
+      {wallError && <div role="alert" className="mx-3 mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">{wallError}</div>}
       {/* Top Banner Notice */}
       <div className="p-3 bg-purple-700 text-white shadow-xs">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
@@ -76,13 +84,13 @@ export const WallFeed: React.FC = () => {
                 Ghana Anonymous Regional Walls
               </h2>
               <p className="text-[11px] text-purple-200">
-                Temporary cross-town conversations. Real owner strictly hidden.
+                Temporary cross-town conversations. Public posts use aliases; prototype storage is not secure.
               </p>
             </div>
           </div>
           <div className="hidden sm:flex items-center gap-1 text-[11px] font-semibold bg-white/10 px-2 py-1 rounded-lg">
             <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
-            <span>Encrypted Privacy</span>
+            <span>Demo anonymity only</span>
           </div>
         </div>
       </div>

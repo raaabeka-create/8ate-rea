@@ -62,7 +62,7 @@ export const CallsList: React.FC = () => {
       <div className="p-3 bg-purple-50/80 border-b border-purple-100 flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs text-purple-900 font-medium">
           <ShieldAlert className="w-4 h-4 text-purple-700 shrink-0" />
-          <span>8ATE Voice & Video Architecture (WebRTC / VoIP simulated)</span>
+          <span>Call history is demo-only; live audio/video is not implemented.</span>
         </div>
       </div>
 

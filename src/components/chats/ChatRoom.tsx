@@ -9,12 +9,10 @@ import {
   MicOff,
   Send,
   Check,
-  CheckCheck,
   Smile,
   Trash2,
   ShieldAlert,
   Play,
-  Pause,
   Image as ImageIcon,
 } from 'lucide-react';
 import { Conversation, ChatMessage, UserProfile } from '../../types';
@@ -40,20 +38,22 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
   const [voiceDuration, setVoiceDuration] = useState(0);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [activeReactionMsgId, setActiveReactionMsgId] = useState<string | null>(null);
-  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [chatError, setChatError] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const loadChat = async () => {
     if (!user) return;
     try {
-      const conv = await chatService.getConversationById(conversationId);
+      setChatError(null);
+      const conv = await chatService.getConversationById(conversationId, user.id);
       setConversation(conv);
-      const msgs = await chatService.getMessages(conversationId);
+      const msgs = await chatService.getMessages(conversationId, user.id);
       setMessages(msgs);
       await chatService.markAsRead(conversationId, user.id);
     } catch (err) {
       console.error('Error loading chat room', err);
+      setChatError('Unable to load this conversation. Check local storage and try again.');
     }
   };
 
@@ -84,12 +84,14 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
     e.preventDefault();
     if (!inputText.trim() || !user) return;
     const text = inputText;
-    setInputText('');
     try {
       await chatService.sendTextMessage(conversationId, user.id, text);
+      setInputText('');
+      setChatError(null);
       await loadChat();
     } catch (err) {
       console.error('Failed to send text', err);
+      setChatError('Message could not be saved. Your draft is still here; please try again.');
     }
   };
 
@@ -104,6 +106,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
       await loadChat();
     } catch (err) {
       console.error('Failed to send voice note', err);
+      setChatError('The demo voice-note placeholder could not be saved.');
+      setIsRecordingVoice(false);
     }
   };
 
@@ -115,6 +119,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
       await loadChat();
     } catch (err) {
       console.error('Failed to send image', err);
+      setChatError('The sample image message could not be saved.');
     }
   };
 
@@ -126,19 +131,22 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
       await loadChat();
     } catch (err) {
       console.error('Reaction failed', err);
+      setChatError('Your reaction could not be saved.');
     }
   };
 
   const handleDeleteMsg = async (messageId: string) => {
+    if (!user) return;
     try {
-      await chatService.deleteMessage(messageId, conversationId);
+      await chatService.deleteMessage(messageId, conversationId, user.id);
       await loadChat();
     } catch (err) {
       console.error('Delete message failed', err);
+      setChatError('Message could not be deleted.');
     }
   };
 
-  const otherUser = conversation?.participants.find((p) => p.id !== user?.id);
+  const otherUser = conversation?.isGroup ? undefined : conversation?.participants.find((p) => p.id !== user?.id);
 
   const getChatTitle = () => {
     if (!conversation) return 'Chat';
@@ -184,7 +192,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
           <div className="min-w-0">
             <h2 className="font-bold text-xs text-gray-900 truncate flex items-center gap-1">
               <span>{getChatTitle()}</span>
-              {otherUser?.verified && <span className="text-[10px] text-purple-600">✓</span>}
+              {otherUser?.verified && <span className="text-[9px] text-purple-600" title="Demo profile flag; not identity verified">Demo</span>}
             </h2>
             <p className="text-[11px] text-purple-700 truncate font-medium">{getChatSubtitle()}</p>
           </div>
@@ -211,25 +219,23 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
             </>
           )}
 
-          <button
-            onClick={() => {
-              if (otherUser) {
-                openReport('user', otherUser.id, `User @${otherUser.username} (${otherUser.displayName})`);
-              }
-            }}
-            title="Report / Safety"
-            className="p-2 text-gray-400 hover:text-red-600 rounded-xl transition-colors"
-          >
-            <ShieldAlert className="w-4 h-4" />
-          </button>
+          {otherUser && (
+            <button
+              onClick={() => openReport('user', otherUser.id, `User @${otherUser.username} (${otherUser.displayName})`)}
+              title="Report / Safety"
+              className="p-2 text-gray-400 hover:text-red-600 rounded-xl transition-colors"
+            >
+              <ShieldAlert className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {/* Safe chat banner */}
-        <div className="p-2.5 rounded-xl bg-purple-50/70 border border-purple-100 text-center max-w-sm mx-auto mb-2 text-[11px] text-purple-900 font-medium">
-          🔒 Messages are encrypted & private. Phone numbers remain completely hidden.
+        {/* Honest development-mode privacy notice: localStorage is not end-to-end encryption. */}
+        <div role="status" className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-center max-w-sm mx-auto mb-2 text-[11px] text-amber-950 font-medium">
+          Demo mode: messages stay in this browser, are not end-to-end encrypted, and have no real delivery/read receipts. Voice notes and calls are simulations. Do not send sensitive information.
         </div>
 
         {messages.map((msg) => {
@@ -266,37 +272,26 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
                   </div>
                 )}
 
-                {/* Audio Voice Note message */}
+                {/* Audio messages are placeholders until real recording/storage/playback is implemented. */}
                 {msg.type === 'audio' ? (
-                  <div className="flex items-center gap-3 py-1 min-w-[160px]">
-                    <button
-                      onClick={() =>
-                        setPlayingAudioId(playingAudioId === msg.id ? null : msg.id)
-                      }
-                      className={`p-2 rounded-full transition-transform active:scale-95 ${
+                  <div className="flex items-center gap-3 py-1 min-w-[180px]">
+                    <div
+                      className={`p-2 rounded-full ${
                         isMine ? 'bg-white/20 text-white' : 'bg-purple-100 text-purple-700'
                       }`}
+                      aria-hidden="true"
                     >
-                      {playingAudioId === msg.id ? (
-                        <Pause className="w-4 h-4" />
-                      ) : (
-                        <Play className="w-4 h-4" />
-                      )}
-                    </button>
+                      <Play className="w-4 h-4" />
+                    </div>
                     <div className="flex-1">
                       <div className="h-1.5 bg-black/10 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full ${isMine ? 'bg-white' : 'bg-purple-600'} ${
-                            playingAudioId === msg.id ? 'w-3/4 animate-pulse' : 'w-1/3'
-                          }`}
-                        />
+                        <div className={`h-full w-1/3 ${isMine ? 'bg-white' : 'bg-purple-600'}`} />
                       </div>
-                      <div
-                        className={`text-[10px] mt-1 font-mono ${
-                          isMine ? 'text-purple-100' : 'text-gray-500'
-                        }`}
-                      >
+                      <div className={`text-[10px] mt-1 font-mono ${isMine ? 'text-purple-100' : 'text-gray-500'}`}>
                         0:{msg.audioDurationSec?.toString().padStart(2, '0') || '15'}
+                      </div>
+                      <div className={`text-[9px] mt-0.5 ${isMine ? 'text-purple-100' : 'text-amber-700'}`}>
+                        Demo placeholder — no audio file
                       </div>
                     </div>
                   </div>
@@ -312,7 +307,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
                 >
                   <span>{formatTime(msg.timestamp)}</span>
                   {isMine && (
-                    <CheckCheck className="w-3.5 h-3.5 text-purple-200" />
+                    <Check className="w-3.5 h-3.5 text-purple-200" aria-label="Demo only: no real delivery or read receipt" />
                   )}
                 </div>
 
@@ -374,6 +369,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
       {/* Attach Media Menu Simulation */}
       {showAttachMenu && (
         <div className="p-3 bg-white border-t border-purple-100 flex items-center gap-3 overflow-x-auto">
+          <span className="text-[10px] text-amber-700 font-semibold shrink-0">Sample URLs only — file upload is not implemented</span>
           {[
             {
               name: 'Accra Tech Hub',
@@ -407,11 +403,16 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
 
       {/* Input / Voice Composer Bar */}
       <div className="p-3 bg-white border-t border-purple-100">
+        {chatError && (
+          <div role="alert" className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] font-medium text-red-800">
+            {chatError}
+          </div>
+        )}
         {isRecordingVoice ? (
           <div className="flex items-center justify-between gap-3 bg-purple-50 p-2 rounded-2xl border border-purple-200 animate-pulse">
             <div className="flex items-center gap-2 text-purple-800 text-xs font-bold pl-2">
               <div className="w-2.5 h-2.5 rounded-full bg-red-600 animate-ping" />
-              <span>Recording Voice Note... 0:{voiceDuration.toString().padStart(2, '0')}</span>
+              <span>Voice-note demo timer — no audio is recorded (0:{voiceDuration.toString().padStart(2, '0')})</span>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -425,7 +426,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
                 className="p-2 rounded-xl bg-purple-700 text-white font-bold text-xs flex items-center gap-1 shadow-xs"
               >
                 <Send className="w-3.5 h-3.5" />
-                <span>Send Note</span>
+                <span>Send Placeholder</span>
               </button>
             </div>
           </div>

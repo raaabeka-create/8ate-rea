@@ -3,7 +3,7 @@
  * 
  * Clean Data-Access Layer abstractions.
  * UI components NEVER access storage or database directly.
- * Ready for 1:1 drop-in replacement with Firebase Authentication + Cloud Firestore.
+ * This isolates persistence, but production adapters still need server auth, RLS, and realtime interfaces; they are not drop-in replacements yet.
  */
 
 import {
@@ -44,9 +44,9 @@ export interface IAuthRepository {
 
 export interface IChatRepository {
   getConversations(userId: string): Promise<Conversation[]>;
-  getConversationById(conversationId: string): Promise<Conversation | null>;
+  getConversationById(conversationId: string, userId: string): Promise<Conversation | null>;
   createConversation(participantIds: string[], isGroup?: boolean, name?: string): Promise<Conversation>;
-  getMessages(conversationId: string): Promise<ChatMessage[]>;
+  getMessages(conversationId: string, userId: string): Promise<ChatMessage[]>;
   sendMessage(
     conversationId: string,
     senderId: string,
@@ -56,16 +56,16 @@ export interface IChatRepository {
     audioDurationSec?: number
   ): Promise<ChatMessage>;
   toggleMessageReaction(messageId: string, conversationId: string, userId: string, emoji: string): Promise<ChatMessage>;
-  deleteMessage(messageId: string, conversationId: string): Promise<void>;
+  deleteMessage(messageId: string, conversationId: string, requesterUserId: string): Promise<void>;
   markConversationAsRead(conversationId: string, userId: string): Promise<void>;
-  togglePinConversation(conversationId: string, isPinned: boolean): Promise<void>;
+  togglePinConversation(conversationId: string, userId: string, isPinned: boolean): Promise<void>;
 }
 
 export interface IWallRepository {
   getWallPairs(): Promise<WallPair[]>;
   getWallPairById(wallPairId: string): Promise<WallPair | null>;
-  getActivePosts(wallPairId?: string, originLocation?: string, destinationLocation?: string): Promise<PublicAnonymousWallPost[]>;
-  getPostById(postId: string): Promise<PublicAnonymousWallPost | null>;
+  getActivePosts(wallPairId?: string, originLocation?: string, destinationLocation?: string, userId?: string): Promise<PublicAnonymousWallPost[]>;
+  getPostById(postId: string, userId?: string): Promise<PublicAnonymousWallPost | null>;
   createPost(
     wallPairId: string,
     originLocation: string,
@@ -75,7 +75,7 @@ export interface IWallRepository {
     ownerUserId: string // Stored in private moderation record only
   ): Promise<PublicAnonymousWallPost>;
   votePost(postId: string, voteType: 'up' | 'down', userId: string): Promise<PublicAnonymousWallPost>;
-  getReplies(postId: string): Promise<WallReply[]>;
+  getReplies(postId: string, userId?: string): Promise<WallReply[]>;
   createReply(postId: string, content: string, ownerUserId: string): Promise<WallReply>;
   voteReply(replyId: string, postId: string, voteType: 'up' | 'down', userId: string): Promise<WallReply>;
 }
@@ -97,8 +97,8 @@ export interface IHubRepository {
 }
 
 export interface IDiscoverRepository {
-  getPosts(category?: DiscoverCategory, searchQuery?: string): Promise<DiscoverPost[]>;
-  getPostById(postId: string): Promise<DiscoverPost | null>;
+  getPosts(category?: DiscoverCategory, searchQuery?: string, userId?: string): Promise<DiscoverPost[]>;
+  getPostById(postId: string, userId?: string): Promise<DiscoverPost | null>;
   createPost(authorId: string, content: string, category: DiscoverCategory, tags: string[], imageUrl?: string): Promise<DiscoverPost>;
   toggleLikePost(postId: string, userId: string): Promise<DiscoverPost>;
   toggleBookmarkPost(postId: string, userId: string): Promise<boolean>;
@@ -122,7 +122,7 @@ export interface ISafetyRepository {
 
 export interface INotificationRepository {
   getNotifications(userId: string): Promise<AppNotification[]>;
-  markAsRead(notificationId: string): Promise<void>;
+  markAsRead(notificationId: string, userId: string): Promise<void>;
   markAllAsRead(userId: string): Promise<void>;
   addNotification(notification: Omit<AppNotification, 'id' | 'createdAt'>): Promise<AppNotification>;
 }

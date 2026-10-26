@@ -7,6 +7,7 @@ interface AuthContextType {
   user: UserProfile | null;
   privateInfo: PrivateAccountInfo | null;
   isLoading: boolean;
+  storageError: string | null;
   allUsers: UserProfile[];
   loginWithPhone: (phone: string) => Promise<UserProfile>;
   register: (params: RegisterParams) => Promise<{ user: UserProfile; privateInfo: PrivateAccountInfo }>;
@@ -23,6 +24,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [privateInfo, setPrivateInfo] = useState<PrivateAccountInfo | null>(null);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [storageError, setStorageError] = useState<string | null>(null);
 
   const refreshUser = async () => {
     try {
@@ -36,13 +38,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       const users = await authService.getAllUsers();
       setAllUsers(users);
+      setStorageError(null);
     } catch (err) {
       console.error('Error refreshing auth user', err);
+      setStorageError('Some saved browser data could not be read. Avoid making changes until the data is recovered or reset.');
     }
   };
 
   useEffect(() => {
-    initializeLocalStorage();
+    try {
+      initializeLocalStorage();
+    } catch (err) {
+      console.error('Local demo storage could not initialize', err);
+    }
     refreshUser().finally(() => setIsLoading(false));
   }, []);
 
@@ -71,9 +79,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    await authService.logout();
-    setUser(null);
-    setPrivateInfo(null);
+    try {
+      await authService.logout();
+    } catch (err) {
+      console.error('Could not persist demo logout; clearing the in-memory session anyway.', err);
+      setStorageError('The browser could not clear the saved demo session. Reload and check local storage before using this browser again.');
+    } finally {
+      setUser(null);
+      setPrivateInfo(null);
+    }
   };
 
   return (
@@ -82,6 +96,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         privateInfo,
         isLoading,
+        storageError,
         allUsers,
         loginWithPhone,
         register,

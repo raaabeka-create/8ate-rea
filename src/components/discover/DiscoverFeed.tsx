@@ -23,6 +23,7 @@ export const DiscoverFeed: React.FC<DiscoverFeedProps> = ({ onStartDirectChat })
   const [posts, setPosts] = useState<DiscoverPost[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<DiscoverCategory | 'ALL'>('ALL');
   const [loading, setLoading] = useState(true);
+  const [feedError, setFeedError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [activePost, setActivePost] = useState<DiscoverPost | null>(null);
 
@@ -41,12 +42,16 @@ export const DiscoverFeed: React.FC<DiscoverFeedProps> = ({ onStartDirectChat })
   const loadPosts = async () => {
     try {
       setLoading(true);
+      setFeedError(null);
       const data = await discoverService.getPosts(
-        selectedCategory === 'ALL' ? undefined : selectedCategory
+        selectedCategory === 'ALL' ? undefined : selectedCategory,
+        undefined,
+        user?.id
       );
       setPosts(data);
     } catch (err) {
       console.error('Failed to load Discover posts', err);
+      setFeedError(err instanceof Error ? err.message : 'Could not load Discover posts.');
     } finally {
       setLoading(false);
     }
@@ -64,6 +69,7 @@ export const DiscoverFeed: React.FC<DiscoverFeedProps> = ({ onStartDirectChat })
       setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     } catch (err) {
       console.error('Like toggle failed', err);
+      setFeedError(err instanceof Error ? err.message : 'Your like could not be saved.');
     }
   };
 
@@ -77,11 +83,13 @@ export const DiscoverFeed: React.FC<DiscoverFeedProps> = ({ onStartDirectChat })
       );
     } catch (err) {
       console.error('Bookmark toggle failed', err);
+      setFeedError(err instanceof Error ? err.message : 'Your bookmark could not be saved.');
     }
   };
 
   return (
     <div className="flex flex-col h-full bg-[#FAF9FC] pb-24 relative">
+      {feedError && <div role="alert" className="mx-3 mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">{feedError}</div>}
       {/* Categories Bar */}
       <div className="p-3 bg-white border-b border-purple-100 sticky top-14 z-10 shadow-2xs overflow-x-auto">
         <div className="max-w-4xl mx-auto flex items-center gap-1.5 min-w-max">
@@ -139,7 +147,7 @@ export const DiscoverFeed: React.FC<DiscoverFeedProps> = ({ onStartDirectChat })
                     <div className="flex items-center gap-1 font-bold text-xs text-gray-900">
                       <span>{post.author.displayName}</span>
                       {post.author.verified && (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-purple-600" />
+                        <span className="text-[9px] text-purple-600 font-semibold" title="Demo profile flag; not identity verified">Demo</span>
                       )}
                     </div>
                     <div className="text-[11px] text-gray-500 font-medium">

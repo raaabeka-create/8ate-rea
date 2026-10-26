@@ -21,12 +21,20 @@ export class CallService {
   }
 
   async recordCall(
+    ownerUserId: string,
     otherUser: UserProfile,
     type: CallType,
     direction: 'incoming' | 'outgoing' | 'missed',
     durationSeconds: number
   ): Promise<CallRecord> {
+    if (!ownerUserId.trim()) throw new Error('Call history requires an owner.');
+    if (!['voice', 'video'].includes(type)) throw new Error('Unsupported call type.');
+    if (!['incoming', 'outgoing', 'missed'].includes(direction)) throw new Error('Unsupported call direction.');
+    if (!Number.isFinite(durationSeconds) || durationSeconds < 0 || durationSeconds > 86400) {
+      throw new Error('Call duration must be between 0 and 24 hours.');
+    }
     return this.callRepo.addCallRecord({
+      ownerUserId,
       otherUser,
       type,
       direction,

@@ -17,8 +17,8 @@ export class NotificationService {
     return this.notifRepo.getNotifications(userId);
   }
 
-  async markAsRead(notificationId: string): Promise<void> {
-    return this.notifRepo.markAsRead(notificationId);
+  async markAsRead(notificationId: string, userId: string): Promise<void> {
+    return this.notifRepo.markAsRead(notificationId, userId);
   }
 
   async markAllAsRead(userId: string): Promise<void> {

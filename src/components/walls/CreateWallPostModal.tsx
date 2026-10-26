@@ -139,7 +139,7 @@ export const CreateWallPostModal: React.FC<CreateWallPostModalProps> = ({
           <div className="p-2.5 rounded-xl bg-purple-50 border border-purple-100 flex items-start gap-2 text-xs text-purple-950">
             <ShieldCheck className="w-4 h-4 text-purple-700 shrink-0 mt-0.5" />
             <div className="text-[11px] leading-snug">
-              <span className="font-bold">100% Anonymous:</span> You will appear with an alias and random avatar. Your real name, @username, and phone are never visible to other users.
+              <span className="font-bold">Prototype privacy notice:</span> The public feed displays an alias, but owner links are stored in this browser. This is not production-grade anonymity; do not post sensitive information.
             </div>
           </div>
 

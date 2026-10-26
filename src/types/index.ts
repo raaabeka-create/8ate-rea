@@ -88,6 +88,10 @@ export interface Conversation {
   participants: UserProfile[];
   lastMessage?: ChatMessage;
   unreadCount: number;
+  /** Per-user unread counts in local prototype storage; not a security boundary. */
+  unreadCountsByUser?: Record<string, number>;
+  /** Per-user pin state, replacing the legacy conversation-wide flag when present. */
+  pinnedByUserIds?: string[];
   isPinned: boolean;
   updatedAt: number;
   createdAt: number;
@@ -216,6 +220,8 @@ export interface DiscoverPost {
   createdAt: number;
   isLiked?: boolean;
   isBookmarked?: boolean;
+  /** User IDs that liked this post; prototype-only state. */
+  likedByUserIds?: string[];
 }
 
 // CALLS
@@ -225,6 +231,8 @@ export type CallStatus = 'completed' | 'missed' | 'rejected' | 'ongoing';
 
 export interface CallRecord {
   id: string;
+  /** Account whose call history this record belongs to. */
+  ownerUserId: string;
   otherUser: UserProfile;
   type: CallType;
   direction: CallDirection;
@@ -286,6 +294,8 @@ export interface AppNotification {
   targetUrl?: string; // navigation target
   createdAt: number;
   isRead: boolean;
+  /** User-specific read state, particularly for broadcast notifications. */
+  readByUserIds?: string[];
   senderAvatar?: string;
   metadata?: Record<string, unknown>;
 }

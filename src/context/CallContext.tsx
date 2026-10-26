@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile, CallType, CallRecord } from '../types';
 import { callService } from '../services';
+import { useAuth } from './AuthContext';
 
 interface CallContextType {
   activeCall: {
@@ -23,6 +24,7 @@ interface CallContextType {
 const CallContext = createContext<CallContextType | undefined>(undefined);
 
 export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuth();
   const [activeCall, setActiveCall] = useState<{
     isActive: boolean;
     otherUser: UserProfile | null;
@@ -89,13 +91,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const endCall = () => {
-    if (activeCall.otherUser && activeCall.elapsedSeconds > 0) {
-      callService.recordCall(
+    if (user && activeCall.otherUser && activeCall.elapsedSeconds > 0) {
+      void callService.recordCall(
+        user.id,
         activeCall.otherUser,
         activeCall.type,
         'outgoing',
         activeCall.elapsedSeconds
-      );
+      ).catch((error) => console.error('Failed to save demo call history', error));
     }
     setActiveCall({
       isActive: false,
