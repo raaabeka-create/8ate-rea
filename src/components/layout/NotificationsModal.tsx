@@ -18,15 +18,18 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [notificationError, setNotificationError] = useState<string | null>(null);
 
   const fetchNotifs = async () => {
     if (!user) return;
     try {
       setLoading(true);
+      setNotificationError(null);
       const data = await notificationService.getNotifications(user.id);
       setNotifications(data);
     } catch (err) {
       console.error('Error fetching notifications', err);
+      setNotificationError(err instanceof Error ? err.message : 'Could not load notifications.');
     } finally {
       setLoading(false);
     }
@@ -42,13 +45,26 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
   const handleMarkAllRead = async () => {
     if (!user) return;
-    await notificationService.markAllAsRead(user.id);
-    await fetchNotifs();
+    setNotificationError(null);
+    try {
+      await notificationService.markAllAsRead(user.id);
+      await fetchNotifs();
+    } catch (err) {
+      console.error('Could not mark all notifications read', err);
+      setNotificationError(err instanceof Error ? err.message : 'Could not update notifications.');
+    }
   };
 
   const handleItemClick = async (notif: AppNotification) => {
     if (!user) return;
-    await notificationService.markAsRead(notif.id, user.id);
+    setNotificationError(null);
+    try {
+      await notificationService.markAsRead(notif.id, user.id);
+    } catch (err) {
+      console.error('Could not mark notification read', err);
+      setNotificationError(err instanceof Error ? err.message : 'Could not update this notification.');
+      return;
+    }
     onClose();
     if (notif.type === 'new_message') {
       onNavigateToTab('CHATS');
@@ -103,6 +119,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {notificationError && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">{notificationError}</div>}
           {loading ? (
             <div className="py-8 text-center text-gray-400 text-sm">Loading alerts...</div>
           ) : notifications.length === 0 ? (
