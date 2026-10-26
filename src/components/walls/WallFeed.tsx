@@ -21,12 +21,14 @@ export const WallFeed: React.FC = () => {
   const [selectedPairId, setSelectedPairId] = useState<string>('ALL');
   const [posts, setPosts] = useState<PublicAnonymousWallPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [wallError, setWallError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [activePostDetail, setActivePostDetail] = useState<PublicAnonymousWallPost | null>(null);
 
   const loadWallsData = async () => {
     try {
       setLoading(true);
+      setWallError(null);
       const pairs = await wallService.getWallPairs();
       setWallPairs(pairs);
 
@@ -39,6 +41,7 @@ export const WallFeed: React.FC = () => {
       setPosts(activePosts);
     } catch (err) {
       console.error('Error loading wall feed', err);
+      setWallError(err instanceof Error ? err.message : 'Could not load the Wall feed.');
     } finally {
       setLoading(false);
     }
@@ -56,6 +59,7 @@ export const WallFeed: React.FC = () => {
       setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     } catch (err) {
       console.error('Vote failed', err);
+      setWallError(err instanceof Error ? err.message : 'Your vote could not be saved.');
     }
   };
 
@@ -69,6 +73,7 @@ export const WallFeed: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-[#FAF9FC] pb-24 relative">
+      {wallError && <div role="alert" className="mx-3 mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-800">{wallError}</div>}
       {/* Top Banner Notice */}
       <div className="p-3 bg-purple-700 text-white shadow-xs">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
