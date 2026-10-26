@@ -8,8 +8,6 @@ import {
   Mic,
   MicOff,
   Send,
-  Check,
-  CheckCheck,
   Smile,
   Trash2,
   ShieldAlert,
@@ -229,7 +227,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {/* Safe chat banner */}
         <div className="p-2.5 rounded-xl bg-purple-50/70 border border-purple-100 text-center max-w-sm mx-auto mb-2 text-[11px] text-purple-900 font-medium">
-          🔒 Messages are encrypted & private. Phone numbers remain completely hidden.
+          Prototype mode: messages are stored in this browser. End-to-end encryption and cross-device delivery are not implemented.
         </div>
 
         {messages.map((msg) => {
@@ -284,6 +282,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
                       )}
                     </button>
                     <div className="flex-1">
+                      <p className="text-[9px] mb-1 opacity-80">Demo playback — no audio file</p>
                       <div className="h-1.5 bg-black/10 rounded-full overflow-hidden">
                         <div
                           className={`h-full ${isMine ? 'bg-white' : 'bg-purple-600'} ${
@@ -312,7 +311,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
                 >
                   <span>{formatTime(msg.timestamp)}</span>
                   {isMine && (
-                    <CheckCheck className="w-3.5 h-3.5 text-purple-200" />
+                    <span className="font-semibold uppercase tracking-wide">Local demo</span>
                   )}
                 </div>
 
@@ -373,7 +372,9 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
 
       {/* Attach Media Menu Simulation */}
       {showAttachMenu && (
-        <div className="p-3 bg-white border-t border-purple-100 flex items-center gap-3 overflow-x-auto">
+        <div className="p-3 bg-white border-t border-purple-100">
+          <p className="text-[10px] text-gray-500 mb-2">Sample images only — file uploads are not implemented in this prototype.</p>
+          <div className="flex items-center gap-3 overflow-x-auto">
           {[
             {
               name: 'Accra Tech Hub',
@@ -402,6 +403,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
               <span className="text-[10px] text-gray-600 mt-1 font-medium">{sample.name}</span>
             </div>
           ))}
+          </div>
         </div>
       )}
 
@@ -411,7 +413,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
           <div className="flex items-center justify-between gap-3 bg-purple-50 p-2 rounded-2xl border border-purple-200 animate-pulse">
             <div className="flex items-center gap-2 text-purple-800 text-xs font-bold pl-2">
               <div className="w-2.5 h-2.5 rounded-full bg-red-600 animate-ping" />
-              <span>Recording Voice Note... 0:{voiceDuration.toString().padStart(2, '0')}</span>
+              <span>Demo timer only — no audio is captured ({voiceDuration}s)</span>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -425,7 +427,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
                 className="p-2 rounded-xl bg-purple-700 text-white font-bold text-xs flex items-center gap-1 shadow-xs"
               >
                 <Send className="w-3.5 h-3.5" />
-                <span>Send Note</span>
+                <span>Send Demo Note</span>
               </button>
             </div>
           </div>
@@ -464,7 +466,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
                   setVoiceDuration(0);
                 }}
                 className="p-2.5 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors"
-                title="Hold or click to record voice note"
+                title="Start the voice-note demo timer; microphone audio is not captured"
               >
                 <Mic className="w-4 h-4" />
               </button>

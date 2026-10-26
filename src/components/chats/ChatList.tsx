@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Pin, MessageSquarePlus, Users, Check, CheckCheck } from 'lucide-react';
+import { Search, Pin, MessageSquarePlus, Users } from 'lucide-react';
 import { Conversation, UserProfile } from '../../types';
 import { chatService } from '../../services';
 import { useAuth } from '../../context/AuthContext';
@@ -188,9 +188,6 @@ export const ChatList: React.FC<ChatListProps> = ({
 
                   <div className="flex items-center justify-between gap-1">
                     <p className="text-xs text-gray-500 truncate flex items-center gap-1 font-normal">
-                      {conv.lastMessage?.senderId === user?.id && (
-                        <CheckCheck className="w-3.5 h-3.5 text-purple-600 shrink-0 inline" />
-                      )}
                       <span>
                         {conv.lastMessage
                           ? conv.lastMessage.content

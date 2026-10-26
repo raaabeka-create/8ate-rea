@@ -19,7 +19,7 @@ export const ActiveCallModal: React.FC = () => {
         {/* Development Call simulation banner */}
         <div className="bg-purple-950/80 px-3 py-1.5 border-b border-purple-800/40 flex items-center justify-center gap-1.5 text-[11px] text-purple-200">
           <ShieldAlert className="w-3.5 h-3.5 text-purple-400" />
-          <span>8ATE Dev Call Simulation (WebRTC/VoIP ready)</span>
+          <span>8ATE call UI demo — no live audio/video connection</span>
         </div>
 
         {/* Main call display */}
@@ -34,7 +34,7 @@ export const ActiveCallModal: React.FC = () => {
                 className="w-full h-full object-cover brightness-90"
               />
               <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/60 text-[10px] font-semibold text-white">
-                Live Video
+                Video preview (demo)
               </div>
             </div>
           ) : (
@@ -59,7 +59,7 @@ export const ActiveCallModal: React.FC = () => {
           </div>
 
           <div className="mt-4 px-3 py-1 rounded-full bg-gray-800/80 border border-gray-700/60 text-xs font-mono font-semibold tracking-wider text-purple-300">
-            {activeCall.isConnecting ? 'Connecting across Ghana...' : formatTimer(activeCall.elapsedSeconds)}
+            {activeCall.isConnecting ? 'Demo connection animation' : 'Demo timer ' + formatTimer(activeCall.elapsedSeconds)}
           </div>
         </div>
 

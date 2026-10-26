@@ -42,8 +42,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    initializeLocalStorage();
-    refreshUser().finally(() => setIsLoading(false));
+    const bootstrap = async () => {
+      try {
+        initializeLocalStorage();
+        await refreshUser();
+      } catch (err) {
+        // Browser storage may be unavailable in private/restricted browsing contexts.
+        // Never leave the application stuck on its loading screen.
+        console.error('Unable to initialize 8ATE local storage', err);
+        setUser(null);
+        setPrivateInfo(null);
+        setAllUsers([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void bootstrap();
   }, []);
 
   const loginWithPhone = async (phone: string) => {

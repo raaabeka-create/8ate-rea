@@ -268,6 +268,11 @@ export class LocalAuthRepository implements IAuthRepository {
 // -------------------------------------------------------------
 export class LocalChatRepository implements IChatRepository {
   async getConversations(userId: string): Promise<Conversation[]> {
+    const currentUserId = getStorage<string | null>(STORAGE_KEYS.CURRENT_USER_ID, null);
+    if (!currentUserId || currentUserId !== userId) {
+      throw new Error('The active demo session can only load its own conversations.');
+    }
+
     const convs = getStorage<Conversation[]>(STORAGE_KEYS.CONVERSATIONS, SEED_CONVERSATIONS);
     const users = getStorage<UserProfile[]>(STORAGE_KEYS.USERS, SEED_USERS);
 
@@ -292,7 +297,8 @@ export class LocalChatRepository implements IChatRepository {
     const convs = getStorage<Conversation[]>(STORAGE_KEYS.CONVERSATIONS, SEED_CONVERSATIONS);
     const users = getStorage<UserProfile[]>(STORAGE_KEYS.USERS, SEED_USERS);
     const conv = convs.find((c) => c.id === conversationId);
-    if (!conv) return null;
+    const currentUserId = getStorage<string | null>(STORAGE_KEYS.CURRENT_USER_ID, null);
+    if (!conv || !currentUserId || !conv.participantIds.includes(currentUserId)) return null;
 
     return {
       ...conv,
@@ -305,6 +311,21 @@ export class LocalChatRepository implements IChatRepository {
   async createConversation(participantIds: string[], isGroup = false, name?: string): Promise<Conversation> {
     const convs = getStorage<Conversation[]>(STORAGE_KEYS.CONVERSATIONS, SEED_CONVERSATIONS);
     const users = getStorage<UserProfile[]>(STORAGE_KEYS.USERS, SEED_USERS);
+    const currentUserId = getStorage<string | null>(STORAGE_KEYS.CURRENT_USER_ID, null);
+    const uniqueParticipantIds = Array.from(new Set(participantIds));
+
+    if (!currentUserId || !uniqueParticipantIds.includes(currentUserId)) {
+      throw new Error('The active demo user must be included in a conversation.');
+    }
+    if (uniqueParticipantIds.length < 2) {
+      throw new Error('A conversation requires at least two distinct participants.');
+    }
+    if (uniqueParticipantIds.some((id) => !users.some((user) => user.id === id))) {
+      throw new Error('A conversation contains an unknown participant.');
+    }
+    if (isGroup && !name?.trim()) {
+      throw new Error('Group conversations require a name.');
+    }
 
     // Check if 1:1 already exists
     if (!isGroup && participantIds.length === 2) {
@@ -324,8 +345,8 @@ export class LocalChatRepository implements IChatRepository {
       avatarUrl: isGroup
         ? 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=200&auto=format&fit=crop&q=80'
         : undefined,
-      participantIds,
-      participants: participantIds
+      participantIds: uniqueParticipantIds,
+      participants: uniqueParticipantIds
         .map((pId) => users.find((u) => u.id === pId))
         .filter((u): u is UserProfile => !!u),
       unreadCount: 0,
@@ -340,6 +361,13 @@ export class LocalChatRepository implements IChatRepository {
   }
 
   async getMessages(conversationId: string): Promise<ChatMessage[]> {
+    const currentUserId = getStorage<string | null>(STORAGE_KEYS.CURRENT_USER_ID, null);
+    const convs = getStorage<Conversation[]>(STORAGE_KEYS.CONVERSATIONS, SEED_CONVERSATIONS);
+    const conversation = convs.find((item) => item.id === conversationId);
+    if (!currentUserId || !conversation || !conversation.participantIds.includes(currentUserId)) {
+      throw new Error('You are not a member of this conversation.');
+    }
+
     const allMessages = getStorage<Record<string, ChatMessage[]>>(STORAGE_KEYS.MESSAGES, SEED_MESSAGES);
     return allMessages[conversationId] || [];
   }
@@ -354,6 +382,17 @@ export class LocalChatRepository implements IChatRepository {
   ): Promise<ChatMessage> {
     const allMessages = getStorage<Record<string, ChatMessage[]>>(STORAGE_KEYS.MESSAGES, SEED_MESSAGES);
     const convs = getStorage<Conversation[]>(STORAGE_KEYS.CONVERSATIONS, SEED_CONVERSATIONS);
+    const currentUserId = getStorage<string | null>(STORAGE_KEYS.CURRENT_USER_ID, null);
+    const conversation = convs.find((item) => item.id === conversationId);
+
+    if (!currentUserId || currentUserId !== senderId) {
+      throw new Error('Messages can only be sent as the active demo user.');
+    }
+    if (!conversation || !conversation.participantIds.includes(senderId)) {
+      throw new Error('You are not a member of this conversation.');
+    }
+    if (!content.trim()) throw new Error('Message content cannot be empty.');
+    if (content.length > 10000) throw new Error('Messages must be 10,000 characters or fewer.');
 
     const messageList = allMessages[conversationId] || [];
     const newMsg: ChatMessage = {
@@ -385,9 +424,17 @@ export class LocalChatRepository implements IChatRepository {
   }
 
   async toggleMessageReaction(messageId: string, conversationId: string, userId: string, emoji: string): Promise<ChatMessage> {
+    const currentUserId = getStorage<string | null>(STORAGE_KEYS.CURRENT_USER_ID, null);
+    const convs = getStorage<Conversation[]>(STORAGE_KEYS.CONVERSATIONS, SEED_CONVERSATIONS);
+    const conversation = convs.find((item) => item.id === conversationId);
+    if (!currentUserId || currentUserId !== userId || !conversation || !conversation.participantIds.includes(userId)) {
+      throw new Error('Only a conversation member using the active demo session can react.');
+    }
+    if (!emoji.trim() || emoji.length > 16) throw new Error('Invalid reaction.');
+
     const allMessages = getStorage<Record<string, ChatMessage[]>>(STORAGE_KEYS.MESSAGES, SEED_MESSAGES);
     const messages = allMessages[conversationId] || [];
-    const msgIndex = messages.findIndex((m) => m.id === messageId);
+    const msgIndex = messages.findIndex((m) => m.id === messageId && m.conversationId === conversationId);
     if (msgIndex === -1) throw new Error('Message not found');
 
     const msg = messages[msgIndex];
@@ -406,24 +453,51 @@ export class LocalChatRepository implements IChatRepository {
   }
 
   async deleteMessage(messageId: string, conversationId: string): Promise<void> {
+    const currentUserId = getStorage<string | null>(STORAGE_KEYS.CURRENT_USER_ID, null);
+    const convs = getStorage<Conversation[]>(STORAGE_KEYS.CONVERSATIONS, SEED_CONVERSATIONS);
+    const conversation = convs.find((item) => item.id === conversationId);
+    if (!currentUserId || !conversation || !conversation.participantIds.includes(currentUserId)) {
+      throw new Error('You are not a member of this conversation.');
+    }
+
     const allMessages = getStorage<Record<string, ChatMessage[]>>(STORAGE_KEYS.MESSAGES, SEED_MESSAGES);
     const messages = allMessages[conversationId] || [];
-    const msgIndex = messages.findIndex((m) => m.id === messageId);
-    if (msgIndex !== -1) {
-      messages[msgIndex].deletedForEveryone = true;
-      messages[msgIndex].content = 'This message was deleted';
-      allMessages[conversationId] = messages;
-      setStorage(STORAGE_KEYS.MESSAGES, allMessages);
+    const msgIndex = messages.findIndex((m) => m.id === messageId && m.conversationId === conversationId);
+    if (msgIndex === -1) throw new Error('Message not found.');
+    if (messages[msgIndex].senderId !== currentUserId) {
+      throw new Error('You can only delete messages you sent.');
+    }
+
+    messages[msgIndex] = {
+      ...messages[msgIndex],
+      deletedForEveryone: true,
+      content: 'This message was deleted',
+      mediaUrl: undefined,
+      audioDurationSec: undefined,
+    };
+    allMessages[conversationId] = messages;
+    setStorage(STORAGE_KEYS.MESSAGES, allMessages);
+
+    const convIndex = convs.findIndex((item) => item.id === conversationId);
+    if (convIndex !== -1 && convs[convIndex].lastMessage?.id === messageId) {
+      convs[convIndex].lastMessage = messages[msgIndex];
+      convs[convIndex].updatedAt = Date.now();
+      setStorage(STORAGE_KEYS.CONVERSATIONS, convs);
     }
   }
 
-  async markConversationAsRead(conversationId: string, _userId: string): Promise<void> {
+  async markConversationAsRead(conversationId: string, userId: string): Promise<void> {
+    const currentUserId = getStorage<string | null>(STORAGE_KEYS.CURRENT_USER_ID, null);
     const convs = getStorage<Conversation[]>(STORAGE_KEYS.CONVERSATIONS, SEED_CONVERSATIONS);
     const convIndex = convs.findIndex((c) => c.id === conversationId);
-    if (convIndex !== -1) {
-      convs[convIndex].unreadCount = 0;
-      setStorage(STORAGE_KEYS.CONVERSATIONS, convs);
+    if (!currentUserId || currentUserId !== userId || convIndex === -1 ||
+        !convs[convIndex].participantIds.includes(userId)) {
+      throw new Error('Only a conversation member using the active demo session can mark it read.');
     }
+
+    // Prototype-only unread count; production receipts must be stored per recipient.
+    convs[convIndex].unreadCount = 0;
+    setStorage(STORAGE_KEYS.CONVERSATIONS, convs);
   }
 
   async togglePinConversation(conversationId: string, isPinned: boolean): Promise<void> {

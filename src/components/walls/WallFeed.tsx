@@ -76,13 +76,13 @@ export const WallFeed: React.FC = () => {
                 Ghana Anonymous Regional Walls
               </h2>
               <p className="text-[11px] text-purple-200">
-                Temporary cross-town conversations. Real owner strictly hidden.
+                Anonymous display names in this browser prototype; anonymity is not server-enforced.
               </p>
             </div>
           </div>
           <div className="hidden sm:flex items-center gap-1 text-[11px] font-semibold bg-white/10 px-2 py-1 rounded-lg">
             <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
-            <span>Encrypted Privacy</span>
+            <span>Prototype privacy</span>
           </div>
         </div>
       </div>

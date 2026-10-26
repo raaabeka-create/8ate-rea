@@ -94,7 +94,7 @@ export const AuthScreen: React.FC = () => {
         <div className="mb-5 p-2.5 rounded-xl bg-purple-50 border border-purple-200/60 flex items-start gap-2 text-xs text-purple-900">
           <ShieldCheck className="w-4 h-4 text-purple-700 shrink-0 mt-0.5" />
           <div className="text-[11px] leading-snug">
-            <span className="font-bold">Development Auth:</span> Zero-budget architecture using local persistent storage. Real SMS provider can be plugged in when deployed to production.
+            <span className="font-bold">Prototype authentication:</span> Accounts are stored in this browser. Phone sign-in does not send SMS or verify identity. Do not use real sensitive information.
           </div>
         </div>
 
@@ -317,7 +317,7 @@ export const AuthScreen: React.FC = () => {
         {/* Privacy Promise Footer */}
         <div className="mt-6 pt-4 border-t border-gray-100 text-center">
           <p className="text-[11px] text-gray-400 leading-normal">
-            🔒 <span className="font-semibold text-gray-600">Privacy Guarantee:</span> Your phone number is strictly private and never visible on profiles, search, or regional walls.
+            <span className="font-semibold text-gray-600">Prototype privacy note:</span> Phone numbers are kept out of public profile fields, but browser storage is not a secure production account database. Do not enter a real private number.
           </p>
         </div>
       </div>
