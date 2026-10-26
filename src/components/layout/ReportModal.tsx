@@ -86,7 +86,7 @@ export const ReportModal: React.FC = () => {
         <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-red-50/50">
           <div className="flex items-center gap-2 text-red-700 font-extrabold text-base">
             <ShieldAlert className="w-5 h-5" />
-            <span>Report Content to 8ATE Safety</span>
+            <span>Report Content (Local Demo)</span>
           </div>
           <button
             onClick={closeReport}
@@ -101,7 +101,7 @@ export const ReportModal: React.FC = () => {
             <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-3">
               <Check className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold text-gray-900">Report Submitted</h3>
+            <h3 className="text-base font-bold text-gray-900">Demo Report Saved</h3>
             <p className="text-xs text-gray-500 mt-1 leading-relaxed">
               Demo report saved locally. No moderation team receives this report in the prototype.
             </p>
@@ -171,7 +171,7 @@ export const ReportModal: React.FC = () => {
                 disabled={submitting}
                 className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs disabled:opacity-50"
               >
-                {submitting ? 'Submitting...' : 'Submit Report'}
+                {submitting ? 'Saving...' : 'Save demo report'}
               </button>
             </div>
           </form>
