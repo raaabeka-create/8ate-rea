@@ -146,7 +146,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
     }
   };
 
-  const otherUser = conversation?.participants.find((p) => p.id !== user?.id);
+  const otherUser = conversation?.isGroup ? undefined : conversation?.participants.find((p) => p.id !== user?.id);
 
   const getChatTitle = () => {
     if (!conversation) return 'Chat';
@@ -219,17 +219,15 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
             </>
           )}
 
-          <button
-            onClick={() => {
-              if (otherUser) {
-                openReport('user', otherUser.id, `User @${otherUser.username} (${otherUser.displayName})`);
-              }
-            }}
-            title="Report / Safety"
-            className="p-2 text-gray-400 hover:text-red-600 rounded-xl transition-colors"
-          >
-            <ShieldAlert className="w-4 h-4" />
-          </button>
+          {otherUser && (
+            <button
+              onClick={() => openReport('user', otherUser.id, `User @${otherUser.username} (${otherUser.displayName})`)}
+              title="Report / Safety"
+              className="p-2 text-gray-400 hover:text-red-600 rounded-xl transition-colors"
+            >
+              <ShieldAlert className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
