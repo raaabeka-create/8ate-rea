@@ -41,8 +41,8 @@ export class DiscoverService {
     return this.discoverRepo.toggleBookmarkPost(postId, userId);
   }
 
-  async getComments(postId: string): Promise<DiscoverComment[]> {
-    return this.discoverRepo.getComments(postId);
+  async getComments(postId: string, userId?: string): Promise<DiscoverComment[]> {
+    return this.discoverRepo.getComments(postId, userId);
   }
 
   async addComment(postId: string, authorId: string, content: string): Promise<DiscoverComment> {

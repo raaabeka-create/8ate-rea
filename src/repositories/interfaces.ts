@@ -55,6 +55,7 @@ export interface IChatRepository {
     mediaUrl?: string,
     audioDurationSec?: number
   ): Promise<ChatMessage>;
+  editMessage(messageId: string, conversationId: string, userId: string, content: string): Promise<ChatMessage>;
   toggleMessageReaction(messageId: string, conversationId: string, userId: string, emoji: string): Promise<ChatMessage>;
   deleteMessage(messageId: string, conversationId: string, requesterUserId: string): Promise<void>;
   markConversationAsRead(conversationId: string, userId: string): Promise<void>;
@@ -86,8 +87,9 @@ export interface IHubRepository {
     region?: GhanaRegion;
     city?: string;
     searchQuery?: string;
+    userId?: string;
   }): Promise<HubListing[]>;
-  getListingById(listingId: string): Promise<HubListing | null>;
+  getListingById(listingId: string, userId?: string): Promise<HubListing | null>;
   createListing(
     listing: Omit<HubListing, 'id' | 'createdAt' | 'viewsCount' | 'savedCount' | 'status'>
   ): Promise<HubListing>;
@@ -102,7 +104,7 @@ export interface IDiscoverRepository {
   createPost(authorId: string, content: string, category: DiscoverCategory, tags: string[], imageUrl?: string): Promise<DiscoverPost>;
   toggleLikePost(postId: string, userId: string): Promise<DiscoverPost>;
   toggleBookmarkPost(postId: string, userId: string): Promise<boolean>;
-  getComments(postId: string): Promise<DiscoverComment[]>;
+  getComments(postId: string, userId?: string): Promise<DiscoverComment[]>;
   addComment(postId: string, authorId: string, content: string): Promise<DiscoverComment>;
   getSavedPosts(userId: string): Promise<DiscoverPost[]>;
 }

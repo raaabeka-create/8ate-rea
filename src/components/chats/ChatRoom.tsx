@@ -9,6 +9,8 @@ import {
   MicOff,
   Send,
   Check,
+  Pencil,
+  X,
   Smile,
   Trash2,
   ShieldAlert,
@@ -38,6 +40,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
   const [voiceDuration, setVoiceDuration] = useState(0);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [activeReactionMsgId, setActiveReactionMsgId] = useState<string | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
   const [chatError, setChatError] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -58,6 +62,9 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
   };
 
   useEffect(() => {
+    setEditingMessageId(null);
+    setEditDraft('');
+    setActiveReactionMsgId(null);
     loadChat();
   }, [conversationId, user]);
 
@@ -139,10 +146,36 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
     if (!user) return;
     try {
       await chatService.deleteMessage(messageId, conversationId, user.id);
+      if (editingMessageId === messageId) {
+        setEditingMessageId(null);
+        setEditDraft('');
+      }
       await loadChat();
     } catch (err) {
       console.error('Delete message failed', err);
       setChatError('Message could not be deleted.');
+    }
+  };
+
+  const handleStartEdit = (message: ChatMessage) => {
+    setEditingMessageId(message.id);
+    setEditDraft(message.content);
+    setChatError(null);
+    setActiveReactionMsgId(null);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent, messageId: string) => {
+    e.preventDefault();
+    if (!user) return;
+    try {
+      await chatService.editTextMessage(messageId, conversationId, user.id, editDraft);
+      setEditingMessageId(null);
+      setEditDraft('');
+      setChatError(null);
+      await loadChat();
+    } catch (err) {
+      console.error('Failed to edit message', err);
+      setChatError(err instanceof Error ? err.message : 'Message could not be edited.');
     }
   };
 
@@ -241,6 +274,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
         {messages.map((msg) => {
           const isMine = msg.senderId === user?.id;
           const sender = conversation?.participants.find((p) => p.id === msg.senderId);
+          const canEdit = isMine && msg.type === 'text' && !msg.deletedForEveryone &&
+            Date.now() >= msg.timestamp && Date.now() - msg.timestamp <= 15 * 60 * 1000;
 
           return (
             <div
@@ -261,7 +296,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
                 }`}
               >
                 {/* Media Image message */}
-                {msg.type === 'image' && msg.mediaUrl && (
+                {msg.type === 'image' && msg.mediaUrl && !msg.deletedForEveryone && (
                   <div className="mb-2 rounded-xl overflow-hidden border border-black/10">
                     <img
                       src={msg.mediaUrl}
@@ -273,7 +308,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
                 )}
 
                 {/* Audio messages are placeholders until real recording/storage/playback is implemented. */}
-                {msg.type === 'audio' ? (
+                {msg.type === 'audio' && !msg.deletedForEveryone ? (
                   <div className="flex items-center gap-3 py-1 min-w-[180px]">
                     <div
                       className={`p-2 rounded-full ${
@@ -295,6 +330,34 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
                       </div>
                     </div>
                   </div>
+                ) : editingMessageId === msg.id && !msg.deletedForEveryone ? (
+                  <form onSubmit={(e) => handleSaveEdit(e, msg.id)} className="min-w-[220px] space-y-2">
+                    <textarea
+                      value={editDraft}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      maxLength={5000}
+                      rows={3}
+                      autoFocus
+                      aria-label="Edit message"
+                      className="w-full resize-y rounded-lg border border-purple-200 bg-white p-2 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setEditingMessageId(null); setEditDraft(''); }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-[10px] font-semibold text-gray-600"
+                      >
+                        <X className="h-3 w-3" /> Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={!editDraft.trim()}
+                        className="inline-flex items-center gap-1 rounded-lg bg-purple-600 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-50"
+                      >
+                        <Send className="h-3 w-3" /> Save edit
+                      </button>
+                    </div>
+                  </form>
                 ) : (
                   <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                 )}
@@ -306,13 +369,16 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
                   }`}
                 >
                   <span>{formatTime(msg.timestamp)}</span>
-                  {isMine && (
+                  {Boolean(msg.editedAt) && !msg.deletedForEveryone && (
+                    <span className="italic">edited</span>
+                  )}
+                  {isMine && !msg.deletedForEveryone && (
                     <Check className="w-3.5 h-3.5 text-purple-200" aria-label="Demo only: no real delivery or read receipt" />
                   )}
                 </div>
 
                 {/* Message reactions badge */}
-                {msg.reactions && msg.reactions.length > 0 && (
+                {msg.reactions && msg.reactions.length > 0 && !msg.deletedForEveryone && (
                   <div className="absolute -bottom-2 right-2 bg-white px-1.5 py-0.5 rounded-full border border-purple-100 shadow-2xs flex items-center gap-0.5 text-xs">
                     {msg.reactions.map((r, i) => (
                       <span key={i}>{r.emoji}</span>
@@ -324,8 +390,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
               {/* Message hover actions (reactions / delete) */}
               <div
                 className={`opacity-0 group-hover:opacity-100 flex items-center gap-1 mt-1 text-[11px] transition-opacity ${
-                  isMine ? 'flex-row-reverse' : 'flex-row'
-                }`}
+                  msg.deletedForEveryone ? 'hidden' : ''
+                } ${isMine ? 'flex-row-reverse' : 'flex-row'}`}
               >
                 <button
                   onClick={() =>
@@ -336,7 +402,18 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
                   <Smile className="w-3 h-3" />
                 </button>
 
-                {isMine && (
+                {canEdit && (
+                  <button
+                    onClick={() => handleStartEdit(msg)}
+                    title="Edit message (within 15 minutes)"
+                    aria-label="Edit message"
+                    className="p-1 text-gray-400 hover:text-purple-600 rounded-md bg-white border border-gray-100 shadow-2xs"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                )}
+
+                {isMine && !msg.deletedForEveryone && (
                   <button
                     onClick={() => handleDeleteMsg(msg.id)}
                     className="p-1 text-gray-400 hover:text-red-600 rounded-md bg-white border border-gray-100 shadow-2xs"
@@ -347,7 +424,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
               </div>
 
               {/* Reaction picker dropdown */}
-              {activeReactionMsgId === msg.id && (
+              {activeReactionMsgId === msg.id && !msg.deletedForEveryone && (
                 <div className="p-1.5 bg-white border border-purple-100 rounded-2xl shadow-lg flex items-center gap-2 z-30 my-1">
                   {['🇬🇭', '🔥', '❤️', '👏', '😂', '🙏', '⚡'].map((emoji) => (
                     <button

@@ -74,6 +74,7 @@ export interface ChatMessage {
   mediaUrl?: string;
   audioDurationSec?: number;
   timestamp: number;
+  editedAt?: number;
   status: MessageStatus;
   reactions: MessageReaction[];
   deletedForEveryone?: boolean;

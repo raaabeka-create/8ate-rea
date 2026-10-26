@@ -50,6 +50,13 @@ export class ChatService {
     return this.chatRepo.sendMessage(conversationId, senderId, trimmed, 'text');
   }
 
+  async editTextMessage(messageId: string, conversationId: string, userId: string, content: string): Promise<ChatMessage> {
+    const trimmed = content.trim();
+    if (!trimmed) throw new Error('Edited messages cannot be empty.');
+    if (trimmed.length > 5000) throw new Error('Messages cannot exceed 5000 characters.');
+    return this.chatRepo.editMessage(messageId, conversationId, userId, trimmed);
+  }
+
   async sendMediaMessage(conversationId: string, senderId: string, imageUrl: string, caption?: string): Promise<ChatMessage> {
     if (!isSecureHttpsUrl(imageUrl)) throw new Error('Image attachments must use a valid secure HTTPS URL.');
     const cleanCaption = caption?.trim() || 'Photo';

@@ -51,6 +51,7 @@ export const HubsFeed: React.FC<HubsFeedProps> = ({ onStartChatWithSeller }) => 
         category: selectedCategory === 'ALL' ? undefined : selectedCategory,
         region: selectedRegion === 'ALL' ? undefined : selectedRegion,
         searchQuery: search.trim() || undefined,
+        userId: user?.id,
       });
       setListings(data);
 

@@ -31,12 +31,13 @@ export class HubService {
     region?: GhanaRegion;
     city?: string;
     searchQuery?: string;
+    userId?: string;
   }): Promise<HubListing[]> {
     return this.hubRepo.getListings(filters);
   }
 
-  async getListingById(id: string): Promise<HubListing | null> {
-    const listing = await this.hubRepo.getListingById(id);
+  async getListingById(id: string, userId?: string): Promise<HubListing | null> {
+    const listing = await this.hubRepo.getListingById(id, userId);
     if (listing) {
       this.hubRepo.incrementViews(id).catch(console.error);
     }

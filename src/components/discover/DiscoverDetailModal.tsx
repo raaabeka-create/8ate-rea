@@ -40,7 +40,7 @@ export const DiscoverDetailModal: React.FC<DiscoverDetailModalProps> = ({
     try {
       setLoadingComments(true);
       setDetailError(null);
-      const data = await discoverService.getComments(post.id);
+      const data = await discoverService.getComments(post.id, user?.id);
       setComments(data);
     } catch (err) {
       console.error('Error fetching comments', err);
