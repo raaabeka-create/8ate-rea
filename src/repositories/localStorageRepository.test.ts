@@ -748,4 +748,38 @@ describe('prototype repository guardrails', () => {
       .rejects.toThrow('Edited messages must contain 1–5000 characters.');
   });
 
+  it('tracks per-recipient read receipts for direct and group messages', async () => {
+    await signInAs('user_kwame');
+    const chats = new LocalChatRepository();
+    const directMessage = await chats.sendMessage(
+      'conv_kwame_ama',
+      'user_kwame',
+      'Direct read receipt test'
+    );
+
+    await signInAs('user_ama');
+    await chats.markConversationAsRead('conv_kwame_ama', 'user_ama');
+    const directMessages = await chats.getMessages('conv_kwame_ama', 'user_ama');
+    const directReceipt = directMessages.find((message) => message.id === directMessage.id);
+    expect(directReceipt?.readByUserIds).toEqual(expect.arrayContaining(['user_kwame', 'user_ama']));
+    expect(directReceipt?.status).toBe('read');
+
+    await signInAs('user_kwame');
+    const group = await chats.createConversation(['user_kwame', 'user_ama', 'user_kofi'], true, 'Receipt test group');
+    const groupMessage = await chats.sendMessage(group.id, 'user_kwame', 'Group read receipt test');
+
+    await signInAs('user_ama');
+    await chats.markConversationAsRead(group.id, 'user_ama');
+    const afterAma = (await chats.getMessages(group.id, 'user_ama')).find((message) => message.id === groupMessage.id);
+    expect(afterAma?.readByUserIds).toEqual(expect.arrayContaining(['user_kwame', 'user_ama']));
+    expect(afterAma?.readByUserIds).not.toContain('user_kofi');
+    expect(afterAma?.status).not.toBe('read');
+
+    await signInAs('user_kofi');
+    await chats.markConversationAsRead(group.id, 'user_kofi');
+    const afterKofi = (await chats.getMessages(group.id, 'user_kofi')).find((message) => message.id === groupMessage.id);
+    expect(afterKofi?.readByUserIds).toEqual(expect.arrayContaining(['user_kwame', 'user_ama', 'user_kofi']));
+    expect(afterKofi?.status).toBe('read');
+  });
+
 });

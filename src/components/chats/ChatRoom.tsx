@@ -274,6 +274,10 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
         {messages.map((msg) => {
           const isMine = msg.senderId === user?.id;
           const sender = conversation?.participants.find((p) => p.id === msg.senderId);
+          const recipientIds = conversation?.participantIds.filter((id) => id !== msg.senderId) ?? [];
+          const readCount = recipientIds.filter((id) => msg.readByUserIds?.includes(id)).length;
+          const allRecipientsRead = msg.status === 'read' ||
+            (recipientIds.length > 0 && readCount === recipientIds.length);
           const canEdit = isMine && msg.type === 'text' && !msg.deletedForEveryone &&
             Date.now() >= msg.timestamp && Date.now() - msg.timestamp <= 15 * 60 * 1000;
 
@@ -373,7 +377,15 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({ conversationId, onBack }) =>
                     <span className="italic">edited</span>
                   )}
                   {isMine && !msg.deletedForEveryone && (
-                    <Check className="w-3.5 h-3.5 text-purple-200" aria-label="Demo only: no real delivery or read receipt" />
+                    <>
+                      <Check
+                        className={`w-3.5 h-3.5 ${allRecipientsRead ? 'text-sky-300' : 'text-purple-200'}`}
+                        aria-label="Local demo read receipt only; not proof of network delivery"
+                      />
+                      {conversation?.isGroup && readCount > 0 && (
+                        <span aria-label="Local demo group read receipts">Read {readCount}/{recipientIds.length}</span>
+                      )}
+                    </>
                   )}
                 </div>
 

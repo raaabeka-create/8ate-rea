@@ -607,6 +607,7 @@ export class LocalChatRepository implements IChatRepository {
       audioDurationSec,
       timestamp: Date.now(),
       status: 'sent',
+      readByUserIds: [senderId],
       reactions: [],
     };
 
@@ -749,8 +750,31 @@ export class LocalChatRepository implements IChatRepository {
       : Object.fromEntries(conversation.participantIds.map((id) => [id, 0]));
     unreadCounts[userId] = 0;
     conversation.unreadCountsByUser = unreadCounts;
+
+    const allMessages = getStorage<Record<string, ChatMessage[]>>(STORAGE_KEYS.MESSAGES, SEED_MESSAGES);
+    const messages = allMessages[conversationId] || [];
+    const updatedMessages: ChatMessage[] = messages.map((message): ChatMessage => {
+      // Older seed data may have a single status but no per-recipient receipt list.
+      const initialReadBy = message.readByUserIds ??
+        (message.status === 'read' ? [...conversation.participantIds] : [message.senderId]);
+      const readBy = new Set(initialReadBy);
+      readBy.add(userId);
+      const recipientIds = conversation.participantIds.filter((participantId) => participantId !== message.senderId);
+      const allRecipientsRead = recipientIds.length > 0 && recipientIds.every((participantId) => readBy.has(participantId));
+      const status: ChatMessage['status'] = allRecipientsRead ? 'read' : (message.status === 'read' ? 'sent' : message.status);
+      return { ...message, readByUserIds: Array.from(readBy), status };
+    });
+    allMessages[conversationId] = updatedMessages;
+    const lastMessage = conversation.lastMessage
+      ? updatedMessages.find((message) => message.id === conversation.lastMessage?.id)
+      : undefined;
+    if (lastMessage) conversation.lastMessage = lastMessage;
     convs[convIndex] = conversation;
-    setStorage(STORAGE_KEYS.CONVERSATIONS, convs);
+
+    setStorageBatch([
+      [STORAGE_KEYS.MESSAGES, allMessages],
+      [STORAGE_KEYS.CONVERSATIONS, convs],
+    ]);
   }
 
   async togglePinConversation(conversationId: string, userId: string, isPinned: boolean): Promise<void> {

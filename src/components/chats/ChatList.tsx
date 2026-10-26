@@ -214,7 +214,10 @@ export const ChatList: React.FC<ChatListProps> = ({
                   <div className="flex items-center justify-between gap-1">
                     <p className="text-xs text-gray-500 truncate flex items-center gap-1 font-normal">
                       {conv.lastMessage?.senderId === user?.id && (
-                        <Check className="w-3.5 h-3.5 text-purple-600 shrink-0 inline" aria-label="Demo status only; no recipient receipt" />
+                        <Check
+                          className={`w-3.5 h-3.5 shrink-0 inline ${conv.lastMessage?.status === 'read' ? 'text-sky-500' : 'text-gray-400'}`}
+                          aria-label="Local demo receipt only; not proof of network delivery"
+                        />
                       )}
                       <span>
                         {conv.lastMessage
