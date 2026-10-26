@@ -43,6 +43,14 @@ class MemoryStorage implements Storage {
   }
 }
 
+class FailingNotificationRepository extends LocalNotificationRepository {
+  override async addNotification(
+    _notification: Parameters<LocalNotificationRepository['addNotification']>[0]
+  ) {
+    throw new Error('forced notification storage failure');
+  }
+}
+
 const auth = new LocalAuthRepository();
 
 async function signInAs(userId: string): Promise<void> {
@@ -851,6 +859,25 @@ describe('prototype repository guardrails', () => {
     await signInAs('user_kwame');
     const kwameNotifications = await notifications.getNotifications('user_kwame');
     expect(kwameNotifications.some((item) => item.body === 'unique-notification-preview-8ate')).toBe(false);
+  });
+
+  it('keeps a saved message successful when local notification persistence fails', async () => {
+    const chatService = new ChatService(new LocalChatRepository(), new FailingNotificationRepository());
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await signInAs('user_kwame');
+
+    try {
+      await expect(chatService.sendTextMessage(
+        'conv_kwame_ama',
+        'user_kwame',
+        'message-survives-notification-failure'
+      )).resolves.toMatchObject({ content: 'message-survives-notification-failure' });
+
+      const saved = await new LocalChatRepository().getMessages('conv_kwame_ama', 'user_kwame');
+      expect(saved.some((message) => message.content === 'message-survives-notification-failure')).toBe(true);
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
 });
